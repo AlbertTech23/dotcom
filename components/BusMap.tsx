@@ -102,7 +102,7 @@ export function BusMap({ profiles, setProfiles, busNumber, isAdmin, mySeatNumber
       {/* Bus map */}
       <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 overflow-x-auto">
         <div className="text-center text-xs text-slate-400 mb-3 tracking-widest uppercase">Front / Driver</div>
-        <div className="inline-block min-w-[260px] w-full max-w-[320px] mx-auto">
+        <div className="block min-w-[260px] w-full max-w-[320px] mx-auto">
           {BUS_LAYOUT.map((row, ri) => (
             <div key={ri} className="grid grid-cols-5 gap-1.5 mb-1.5">
               {row.map((cell, ci) => {
