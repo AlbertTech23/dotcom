@@ -63,6 +63,7 @@ export function DesktopNav({ isStaff, homeHref, qrToken, locationSharing }: Prop
   }
 
   return (
+    <>
     <header className="hidden md:block sticky top-0 z-[700] bg-white/95 dark:bg-slate-900/95 backdrop-blur border-b border-slate-200 dark:border-slate-800">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-4">
         <Link href={homeHref} className="flex items-center flex-shrink-0">
@@ -130,8 +131,11 @@ export function DesktopNav({ isStaff, homeHref, qrToken, locationSharing }: Prop
           </button>
         </div>
       </div>
+      </header>
 
-      {/* My QR modal (member) */}
+      {/* My QR modal (member) — rendered outside the backdrop-blur <header> so
+          `fixed inset-0` resolves against the viewport, not the header's box
+          (backdrop-filter establishes a containing block for fixed descendants). */}
       {qrOpen && qrToken && (
         <div
           onClick={() => setQrOpen(false)}
@@ -152,6 +156,6 @@ export function DesktopNav({ isStaff, homeHref, qrToken, locationSharing }: Prop
           </div>
         </div>
       )}
-    </header>
+    </>
   )
 }
