@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useTheme } from 'next-themes'
@@ -24,6 +24,22 @@ function makeIcon(status: 'on_bus' | 'off_bus') {
   })
 }
 
+// Fixed reference points for the trip — always shown on the map.
+const PINNED_PLACES = [
+  { name: 'Titik Kumpul — UMN', lat: -6.256738,  lng: 106.6183029, emoji: '🚩' },
+  { name: 'Villa Teras Air',     lat: -6.6850739, lng: 106.925747,  emoji: '🏡' },
+]
+
+function makePlaceIcon(emoji: string) {
+  return L.divIcon({
+    html: `<div style="font-size:24px;line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.6))">${emoji}</div>`,
+    className: '',
+    iconSize:   [26, 26],
+    iconAnchor: [13, 26],
+    popupAnchor:[0, -24],
+  })
+}
+
 // Forces Leaflet to re-read container dimensions after React finishes layout.
 // Without this, the map can initialize at 0×0 inside a dynamic() import,
 // leaving pan/zoom geometry wrong until the first resize.
@@ -36,8 +52,8 @@ function InvalidateOnMount() {
   return null
 }
 
-// Default center: Sleman, Yogyakarta (trip area)
-const DEFAULT_CENTER: [number, number] = [-7.72, 110.37]
+// Default center: midpoint between the pinned places (UMN ↔ villa) so both show.
+const DEFAULT_CENTER: [number, number] = [-6.4709, 106.772]
 
 interface Props {
   initialProfiles: Profile[]
@@ -93,11 +109,19 @@ export default function LiveMap({ initialProfiles }: Props) {
   return (
     <MapContainer
       center={center}
-      zoom={15}
+      zoom={visible.length > 0 ? 14 : 10}
       className="h-full w-full"
     >
       <InvalidateOnMount />
       <TileLayer key={tileUrl} url={tileUrl} attribution={tileAttribution} subdomains="abcd" />
+
+      {/* Fixed trip reference pins */}
+      {PINNED_PLACES.map(place => (
+        <Marker key={place.name} position={[place.lat, place.lng]} icon={makePlaceIcon(place.emoji)}>
+          <Tooltip permanent direction="top" offset={[0, -24]}>{place.name}</Tooltip>
+          <Popup><div className="text-sm font-semibold">{place.name}</div></Popup>
+        </Marker>
+      ))}
 
       {visible.map(p => (
         <Marker
