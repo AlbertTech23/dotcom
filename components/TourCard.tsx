@@ -12,7 +12,7 @@ export function TourCard({
   prevStep,
   arrow,
 }: CardComponentProps) {
-  const { closeOnborda } = useOnborda()
+  const { closeOnborda, currentTour } = useOnborda()
   const cardRef = useRef<HTMLDivElement>(null)
 
   // Onborda positions the card relative to the highlighted element (e.g. it
@@ -52,14 +52,11 @@ export function TourCard({
     }
   }, [currentStep, step])
 
-  async function handleSkip() {
+  // Mark this device as having seen the current tour (localStorage, per browser),
+  // then close. No server write — onboarding is device-locked, not per-user.
+  function dismiss() {
+    if (currentTour) localStorage.setItem(`dotcom-tour-seen:${currentTour}`, '1')
     closeOnborda()
-    await fetch('/api/me/onboarding-done', { method: 'PATCH' })
-  }
-
-  async function handleFinish() {
-    closeOnborda()
-    await fetch('/api/me/onboarding-done', { method: 'PATCH' })
   }
 
   const isLast = currentStep + 1 === totalSteps
@@ -80,7 +77,7 @@ export function TourCard({
           </h3>
         </div>
         <button
-          onClick={handleSkip}
+          onClick={dismiss}
           className="flex-shrink-0 p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition"
           title="Skip tour"
         >
@@ -114,7 +111,7 @@ export function TourCard({
         <div className="flex items-center gap-1">
           {isLast ? (
             <button
-              onClick={handleFinish}
+              onClick={dismiss}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition"
             >
               <CheckCircle2 size={13} />

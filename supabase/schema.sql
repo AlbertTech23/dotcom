@@ -32,7 +32,6 @@ create table if not exists public.profiles (
   location_sharing     boolean     not null default false,
   location_updated_at  timestamptz,
   last_changed_at      timestamptz,
-  has_seen_onboarding  boolean     not null default false,
   created_at        timestamptz not null default now(),
   -- prevent two people sharing a seat on the same bus
   unique (bus_number, seat_number)
@@ -203,3 +202,7 @@ create index if not exists logs_member_id_idx     on public.status_logs(member_i
 --     return new;
 --   end; $$;
 -- commit;
+
+-- Step 7: onboarding is now device-locked (localStorage), not per-user — drop the
+-- unused flag (run on existing deployments):
+-- alter table public.profiles drop column if exists has_seen_onboarding;
