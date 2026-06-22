@@ -1,6 +1,6 @@
 'use client'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Logo } from '@/components/Logo'
@@ -26,7 +26,6 @@ interface Props {
  */
 export function DesktopNav({ isStaff, homeHref, qrToken, locationSharing }: Props) {
   const pathname = usePathname()
-  const router = useRouter()
   const [qrOpen, setQrOpen] = useState(false)
 
   const links: { href: string; label: string; icon: LucideIcon; active: boolean }[] = [
@@ -47,8 +46,8 @@ export function DesktopNav({ isStaff, homeHref, qrToken, locationSharing }: Prop
   async function signOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
+    // Full reload so the root layout re-renders without auth and the nav clears.
+    window.location.assign('/login')
   }
 
   return (

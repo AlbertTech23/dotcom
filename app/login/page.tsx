@@ -1,12 +1,10 @@
 'use client'
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Logo, LogoMark } from '@/components/Logo'
 import { ThemeToggle } from '@/components/ThemeToggle'
 
 export default function LoginPage() {
-  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -23,11 +21,10 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-    // Go straight to the dashboard; middleware redirects members to /me and
-    // keeps admins/committee on /dashboard. refresh() first so server components
-    // pick up the freshly-set auth cookie before the navigation renders.
-    router.refresh()
-    router.push('/dashboard')
+    // Full-page navigation (not client routing) so the root layout re-renders
+    // server-side with the new auth cookie — that's what makes the nav appear
+    // immediately. Middleware sends members to /me and keeps staff on /dashboard.
+    window.location.assign('/dashboard')
   }
 
   return (
