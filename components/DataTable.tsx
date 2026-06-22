@@ -243,17 +243,21 @@ export function DataTable({
       enableHiding: false,
       cell: ({ row }) => {
         const p = row.original
+        const onBus = p.status === 'on_bus'
         return (
           <button
             onClick={(e) => { e.stopPropagation(); toggle(p.id) }}
             disabled={toggling === p.id}
-            className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition disabled:opacity-50 whitespace-nowrap ${
-              p.status === 'on_bus'
-                ? 'bg-red-100 dark:bg-red-900/50 hover:bg-red-200 dark:hover:bg-red-800 text-red-700 dark:text-red-300'
-                : 'bg-emerald-100 dark:bg-emerald-900/50 hover:bg-emerald-200 dark:hover:bg-emerald-800 text-emerald-700 dark:text-emerald-300'
+            role="switch"
+            aria-checked={onBus}
+            title={onBus ? 'On bus — tap to mark off' : 'Off bus — tap to mark on'}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition disabled:opacity-50 ${
+              onBus ? 'bg-emerald-500' : 'bg-red-400 dark:bg-red-500'
             }`}
           >
-            {toggling === p.id ? '…' : p.status === 'on_bus' ? 'Mark Off' : 'Mark Back'}
+            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+              onBus ? 'translate-x-[22px]' : 'translate-x-0.5'
+            }`} />
           </button>
         )
       },
@@ -301,12 +305,21 @@ export function DataTable({
         : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:border-slate-400 dark:hover:border-slate-500'
     }`
 
+  // Status chips are colour-coded so the distinction is obvious at a glance.
+  const statusBtnClass = (value: string, active: boolean) => {
+    const base = 'text-xs px-2.5 py-1.5 rounded-lg font-semibold transition border'
+    if (!active) return `${base} border-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700`
+    if (value === 'on_bus')  return `${base} bg-emerald-500 border-emerald-500 text-white`
+    if (value === 'off_bus') return `${base} bg-red-500 border-red-500 text-white`
+    return `${base} bg-slate-700 border-slate-700 text-white dark:bg-slate-600 dark:border-slate-600`
+  }
+
   return (
     <div className="space-y-3">
       {/* ── Toolbar ── */}
       <div id="onb-filters" className="space-y-2">
-        {/* Primary row: search + filters toggle + export (stays compact on mobile) */}
-        <div className="flex items-center gap-2">
+        {/* Primary row: search + status + filters toggle + export (wraps on mobile) */}
+        <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-0">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <input
@@ -316,6 +329,15 @@ export function DataTable({
               onChange={e => setGlobalFilter(e.target.value)}
               className="w-full pl-8 pr-3 py-2 text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+          </div>
+
+          {/* Status — the most-used filter, kept inline beside the search */}
+          <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1 flex-shrink-0">
+            {(['all', 'on_bus', 'off_bus'] as const).map(s => (
+              <button key={s} onClick={() => setStatusFilter(s)} className={statusBtnClass(s, statusFilter === s)}>
+                {s === 'all' ? 'All' : s === 'on_bus' ? 'On Bus' : 'Off Bus'}
+              </button>
+            ))}
           </div>
 
           <button
@@ -391,18 +413,9 @@ export function DataTable({
           </div>
         </div>
 
-        {/* Secondary row: collapsible filters */}
+        {/* Secondary row: collapsible filters (role / bus / group) */}
         {filtersOpen && (
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-2">
-            {/* Status filter */}
-            <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1">
-              {(['all', 'on_bus', 'off_bus'] as const).map(s => (
-                <button key={s} onClick={() => setStatusFilter(s)} className={filterBtnClass(statusFilter === s)}>
-                  {s === 'all' ? 'All' : s === 'on_bus' ? 'On Bus' : 'Off Bus'}
-                </button>
-              ))}
-            </div>
-
             {/* Role filter */}
             <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1">
               {(['all', 'member', 'committee'] as const).map(r => (
