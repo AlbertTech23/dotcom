@@ -8,6 +8,7 @@ import { NavigationProgress } from '@/components/NavigationProgress'
 import { FooterNav } from '@/components/FooterNav'
 import { TopNav } from '@/components/TopNav'
 import { PwaPrompt } from '@/components/PwaPrompt'
+import { AppToaster } from '@/components/AppToaster'
 import { tours } from '@/lib/tours'
 
 export const metadata: Metadata = {
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="id" suppressHydrationWarning>
       <body className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 antialiased">
         <ThemeProvider>
+          <AppToaster />
           <OnbordaProvider>
             <Onborda
               steps={tours}
