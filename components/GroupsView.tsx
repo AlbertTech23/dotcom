@@ -1,12 +1,14 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { toast } from 'sonner'
 import { StatusBadge } from '@/components/StatusBadge'
 import type { Profile } from '@/types/database'
-import { Users, Pencil, Check, X, Trash2, ChevronDown, Plus } from 'lucide-react'
+import { Users, Pencil, Check, X, Trash2, ChevronDown, Plus, ChevronLeft } from 'lucide-react'
 
 interface GroupsViewProps {
   initialProfiles: Profile[]
+  persistedGroups: string[]
   isAdmin: boolean
   myGroupLabel?: string | null
 }
@@ -14,7 +16,7 @@ interface GroupsViewProps {
 function groupBy(profiles: Profile[]): Map<string, Profile[]> {
   const map = new Map<string, Profile[]>()
   for (const p of profiles) {
-    if (p.role !== 'member') continue
+    if (p.role === 'admin') continue
     const key = p.group_label?.trim() || 'Unassigned'
     if (!map.has(key)) map.set(key, [])
     map.get(key)!.push(p)
@@ -129,9 +131,9 @@ function GroupPicker({
   )
 }
 
-export function GroupsView({ initialProfiles, isAdmin, myGroupLabel }: GroupsViewProps) {
+export function GroupsView({ initialProfiles, persistedGroups, isAdmin, myGroupLabel }: GroupsViewProps) {
   const [profiles, setProfiles] = useState<Profile[]>(initialProfiles)
-  const [pendingGroups, setPendingGroups] = useState<string[]>([])
+  const [groupNames, setGroupNames] = useState<string[]>(persistedGroups)
 
   // Group header rename / delete state
   const [renamingGroup, setRenamingGroup] = useState<string | null>(null)
@@ -153,8 +155,21 @@ export function GroupsView({ initialProfiles, isAdmin, myGroupLabel }: GroupsVie
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => {
         setProfiles(prev => {
           if (payload.eventType === 'DELETE') return prev.filter(p => p.id !== (payload.old as Profile).id)
-          if (payload.eventType === 'INSERT') return [...prev, payload.new as Profile]
-          return prev.map(p => p.id === (payload.new as Profile).id ? { ...p, ...payload.new } : p)
+          const row = payload.new as Profile
+          if (payload.eventType === 'INSERT') return prev.some(p => p.id === row.id) ? prev : [...prev, row]
+          return prev.map(p => p.id === row.id ? { ...p, ...row } : p)
+        })
+      })
+      // The groups registry (so create/rename/delete from other devices reflect too).
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'groups' }, payload => {
+        setGroupNames(prev => {
+          if (payload.eventType === 'DELETE') return prev.filter(n => n !== (payload.old as { name: string }).name)
+          const name = (payload.new as { name: string }).name
+          if (payload.eventType === 'UPDATE') {
+            const old = (payload.old as { name?: string }).name
+            return [...new Set(prev.map(n => (n === old ? name : n)))]
+          }
+          return prev.includes(name) ? prev : [...prev, name]
         })
       })
       .subscribe()
@@ -168,52 +183,92 @@ export function GroupsView({ initialProfiles, isAdmin, myGroupLabel }: GroupsVie
   // ── API helpers ──────────────────────────────────────────
   async function assignMember(memberId: string, groupLabel: string | null) {
     setPickerMemberId(null)
+    // Update locally first so the move shows instantly (no realtime dependency).
+    setProfiles(prev => prev.map(p => (p.id === memberId ? { ...p, group_label: groupLabel } : p)))
     await fetch('/api/admin/groups', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ memberId, groupLabel }),
     })
+    toast.success(groupLabel ? `Moved to ${groupLabel}` : 'Removed from group')
   }
 
   async function renameGroup(oldLabel: string, newLabel: string) {
     setRenamingGroup(null)
-    if (oldLabel === newLabel) return
+    const next = newLabel.trim()
+    if (!next || oldLabel === next) return
+    setGroupNames(prev => prev.map(n => (n === oldLabel ? next : n)))
+    setProfiles(prev => prev.map(p => (p.group_label === oldLabel ? { ...p, group_label: next } : p)))
     await fetch('/api/admin/groups', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ oldLabel, newLabel }),
+      body: JSON.stringify({ oldLabel, newLabel: next }),
     })
+    toast.success('Group renamed')
   }
 
   async function deleteGroup(label: string) {
     setDeletingGroup(null)
+    setGroupNames(prev => prev.filter(n => n !== label))
+    setProfiles(prev => prev.map(p => (p.group_label === label ? { ...p, group_label: null } : p)))
     await fetch('/api/admin/groups', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label }),
     })
+    toast.success(`Group “${label}” deleted`)
   }
 
-  function addPendingGroup(name: string) {
+  // Persist the new group so it survives refresh even before any member joins it.
+  async function createGroup(name: string) {
     setShowNewGroup(false)
     setNewGroupName('')
-    if (!name) return
-    setPendingGroups(prev => prev.includes(name) ? prev : [...prev, name])
+    const n = name.trim()
+    if (!n) return
+    setGroupNames(prev => (prev.includes(n) ? prev : [...prev, n]))
+    await fetch('/api/admin/groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: n }),
+    })
+    toast.success(`Group “${n}” created`)
   }
 
-  const groups = groupBy(profiles)
-  const options = [...new Set([...namedGroups(profiles), ...pendingGroups])].sort()
+  const memberGroups = groupBy(profiles)
+  const options = [...new Set([...groupNames, ...namedGroups(profiles)])].sort()
 
-  const groupEntries: [string, Profile[]][] = [...groups.entries()].sort((a, b) => {
-    if (myGroupLabel && a[0] === myGroupLabel) return -1
-    if (myGroupLabel && b[0] === myGroupLabel) return 1
-    if (a[0] === 'Unassigned') return 1
-    if (b[0] === 'Unassigned') return -1
-    return 0
+  // Every group from the registry (even empty) plus any legacy label-only groups.
+  const allNames = [...new Set([
+    ...groupNames,
+    ...[...memberGroups.keys()].filter(k => k !== 'Unassigned'),
+  ])].sort((a, b) => {
+    if (myGroupLabel && a === myGroupLabel) return -1
+    if (myGroupLabel && b === myGroupLabel) return 1
+    return a.localeCompare(b)
   })
+  const groupEntries: [string, Profile[]][] = allNames.map(n => [n, memberGroups.get(n) ?? []])
+  if (memberGroups.has('Unassigned')) groupEntries.push(['Unassigned', memberGroups.get('Unassigned')!])
+
+  // Reactive header totals.
+  const groupTotal  = allNames.length
+  const memberTotal = profiles.filter(p => p.role !== 'admin').length
+  const backHref    = isAdmin ? '/dashboard' : '/me'
 
   return (
-    <div className="space-y-4">
+    <div id="onb-groups" className="space-y-4">
+      <div className="flex items-center gap-3">
+        <a href={backHref} className="flex items-center gap-1 text-slate-500 hover:text-slate-900 dark:hover:text-white transition text-sm flex-shrink-0">
+          <ChevronLeft size={16} />Back
+        </a>
+        <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
+        <Users size={20} className="text-purple-500 dark:text-purple-400 flex-shrink-0" />
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Groups</h1>
+          <p className="text-slate-500 text-xs mt-0.5">
+            {groupTotal} group{groupTotal !== 1 ? 's' : ''} · {memberTotal} members
+          </p>
+        </div>
+      </div>
       {/* New group button (admin only) — matches RoomsView "Add Room" style */}
       {isAdmin && (
         showNewGroup ? (
@@ -224,13 +279,13 @@ export function GroupsView({ initialProfiles, isAdmin, myGroupLabel }: GroupsVie
               value={newGroupName}
               onChange={e => setNewGroupName(e.target.value)}
               onKeyDown={e => {
-                if (e.key === 'Enter' && newGroupName.trim()) addPendingGroup(newGroupName.trim())
+                if (e.key === 'Enter' && newGroupName.trim()) createGroup(newGroupName.trim())
                 if (e.key === 'Escape') { setShowNewGroup(false); setNewGroupName('') }
               }}
               placeholder="Group name…"
               className="flex-1 bg-transparent text-sm text-slate-900 dark:text-white outline-none placeholder:text-slate-400"
             />
-            <button onClick={() => addPendingGroup(newGroupName.trim())} className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 p-0.5">
+            <button onClick={() => createGroup(newGroupName.trim())} className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 p-0.5">
               <Check size={15} />
             </button>
             <button onClick={() => { setShowNewGroup(false); setNewGroupName('') }} className="text-slate-400 hover:text-slate-600 p-0.5">
@@ -247,27 +302,9 @@ export function GroupsView({ initialProfiles, isAdmin, myGroupLabel }: GroupsVie
         )
       )}
 
-      {groups.size === 0 && !pendingGroups.length && (
-        <p className="text-slate-500 text-sm text-center py-8">No members yet.</p>
+      {groupEntries.length === 0 && (
+        <p className="text-slate-500 text-sm text-center py-8">No groups yet.</p>
       )}
-
-      {/* Pending (empty) groups — visible only until a member is assigned */}
-      {pendingGroups.filter(g => !groups.has(g)).map(g => (
-        <div key={g} className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3">
-            <div className="flex items-center gap-2">
-              <Users size={16} className="text-slate-400" />
-              <span className="font-semibold text-slate-500">{g}</span>
-              <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded-full">empty — assign a member below</span>
-            </div>
-            <button
-              onClick={() => setPendingGroups(prev => prev.filter(x => x !== g))}
-              className="text-slate-400 hover:text-red-500 transition p-0.5"
-              title="Discard"
-            ><X size={14} /></button>
-          </div>
-        </div>
-      ))}
 
       {groupEntries.map(([groupName, members]) => {
         const isMyGroup = !!(myGroupLabel && groupName === myGroupLabel)

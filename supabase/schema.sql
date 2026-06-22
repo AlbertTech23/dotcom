@@ -47,6 +47,14 @@ create table if not exists public.member_private (
   qr_token    uuid        not null unique default gen_random_uuid()
 );
 
+-- Groups (registry of group names, so empty groups persist like rooms do).
+-- Membership itself stays as profiles.group_label (text) matching a group name.
+create table if not exists public.groups (
+  id          uuid        primary key default gen_random_uuid(),
+  name        text        not null unique,
+  created_at  timestamptz not null default now()
+);
+
 -- Status logs (audit trail)
 create table if not exists public.status_logs (
   id          uuid        primary key default gen_random_uuid(),
@@ -100,6 +108,7 @@ alter table public.profiles       enable row level security;
 alter table public.member_private enable row level security;
 alter table public.status_logs    enable row level security;
 alter table public.rooms          enable row level security;
+alter table public.groups         enable row level security;
 
 -- profiles: all authenticated users can read all profiles (roster + opt-in location).
 -- Safe because profiles holds no PII — sensitive fields live in member_private.
@@ -126,10 +135,15 @@ create policy "admin_insert_rooms" on public.rooms for insert with check (public
 create policy "admin_update_rooms" on public.rooms for update using (public.is_admin());
 create policy "admin_delete_rooms" on public.rooms for delete using (public.is_admin());
 
+-- groups: all authenticated users can read; only admin can write
+create policy "all_select_groups"  on public.groups for select using (auth.uid() is not null);
+create policy "admin_write_groups" on public.groups for all using (public.is_admin()) with check (public.is_admin());
+
 -- ── Realtime ────────────────────────────────────────────────
 -- Run if supabase_realtime publication doesn't already include these tables:
 alter publication supabase_realtime add table public.profiles;
 alter publication supabase_realtime add table public.rooms;
+alter publication supabase_realtime add table public.groups;
 
 -- ── Indexes ─────────────────────────────────────────────────
 -- qr_token is indexed by its UNIQUE constraint on member_private (no extra index needed)
@@ -206,3 +220,17 @@ create index if not exists logs_member_id_idx     on public.status_logs(member_i
 -- Step 7: onboarding is now device-locked (localStorage), not per-user — drop the
 -- unused flag (run on existing deployments):
 -- alter table public.profiles drop column if exists has_seen_onboarding;
+
+-- Step 8: groups registry so empty groups persist (run on existing deployments)
+-- create table if not exists public.groups (
+--   id uuid primary key default gen_random_uuid(),
+--   name text not null unique,
+--   created_at timestamptz not null default now()
+-- );
+-- insert into public.groups (name)
+--   select distinct group_label from public.profiles where group_label is not null
+--   on conflict (name) do nothing;
+-- alter table public.groups enable row level security;
+-- create policy "all_select_groups"  on public.groups for select using (auth.uid() is not null);
+-- create policy "admin_write_groups" on public.groups for all using (public.is_admin()) with check (public.is_admin());
+-- alter publication supabase_realtime add table public.groups;
