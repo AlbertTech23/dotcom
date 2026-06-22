@@ -5,8 +5,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { MemberForm } from '@/components/MemberForm'
 import { StatusBadge } from '@/components/StatusBadge'
 import { RoleSelector } from '@/components/RoleSelector'
+import { DeleteMemberButton } from '@/components/DeleteMemberButton'
 import { formatTime, toWaNumber } from '@/lib/utils'
-import type { Profile, MemberPrivate } from '@/types/database'
+import type { Profile, MemberPrivate, Room } from '@/types/database'
 import { ChevronLeft, CheckCircle2, LogOut as LogOutIcon } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -28,6 +29,18 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
   const priv = privData as Pick<MemberPrivate, 'student_id' | 'phone' | 'qr_token'> | null
   // Merged view for the edit form, which expects student_id/phone on the profile.
   const profileForForm = { ...profile, ...(priv ?? {}) }
+
+  // Rooms + distinct group labels for the form's dropdowns.
+  const [{ data: roomsData }, { data: groupRows }] = await Promise.all([
+    supabase.from('rooms').select('*').order('name'),
+    supabase.from('profiles').select('group_label'),
+  ])
+  const rooms = (roomsData ?? []) as Room[]
+  const groups = Array.from(
+    new Set(((groupRows ?? []) as { group_label: string | null }[])
+      .map(r => r.group_label)
+      .filter((g): g is string => !!g)),
+  ).sort()
 
   // Only true admins may assign roles (committee can view this page but not change
   // roles — the API enforces this; we hide the control to match).
@@ -62,7 +75,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
       {/* Edit form */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-4">Edit Info</h2>
-        <MemberForm mode="edit" profile={profileForForm} />
+        <MemberForm mode="edit" profile={profileForForm} rooms={rooms} groups={groups} />
       </div>
 
       {/* Role assignment — admin only */}
@@ -114,13 +127,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
       )}
 
       {/* Delete */}
-      <form action={deleteMember}>
-        <button type="submit"
-          onClick={e => { if (!confirm(`Delete ${profile.full_name}? This cannot be undone.`)) e.preventDefault() }}
-          className="w-full border border-red-300 dark:border-red-800 hover:border-red-500 dark:hover:border-red-600 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-sm font-medium py-2.5 rounded-xl transition">
-          Delete Member
-        </button>
-      </form>
+      <DeleteMemberButton action={deleteMember} name={profile.full_name} />
     </div>
   )
 }

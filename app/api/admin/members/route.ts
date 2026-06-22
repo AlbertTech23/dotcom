@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireAdmin } from '@/lib/supabase/require-admin'
+import { requireAdmin, requireSuperAdmin } from '@/lib/supabase/require-admin'
+
+// Admin accounts are NOT created via this endpoint — only member/committee.
+const VALID_ROLES = ['committee', 'member']
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -10,10 +13,18 @@ export async function POST(req: NextRequest) {
   if (denied) return denied
 
   const body = await req.json()
-  const { email, password, full_name, student_id, phone, group_label } = body
+  const { email, password, full_name, student_id, phone, group_label, room_id, bus_number, role } = body
 
   if (!email || !password || !full_name) {
     return NextResponse.json({ error: 'email, password, and full_name are required' }, { status: 400 })
+  }
+
+  // Default to member. Assigning an elevated role (admin/committee) at creation is
+  // admin-only — committee can create members but not escalate (mirrors the role endpoint).
+  const newRole = VALID_ROLES.includes(role) ? role : 'member'
+  if (newRole !== 'member') {
+    const notSuper = await requireSuperAdmin(supabase)
+    if (notSuper) return notSuper
   }
 
   const admin = createAdminClient()
@@ -27,11 +38,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authError?.message ?? 'Failed to create user' }, { status: 500 })
   }
 
-  const { error: profileError } = await supabase.from('profiles').insert({
+  // Upsert (not insert): the on_auth_user_created trigger already created a
+  // profiles row, so we update it here rather than collide on the primary key.
+  const { error: profileError } = await supabase.from('profiles').upsert({
     id:          authData.user.id,
     full_name,
-    role:        'member',
+    role:        newRole,
     group_label: group_label ?? null,
+    room_id:     room_id ?? null,
+    bus_number:  bus_number ?? null,
   })
 
   if (profileError) {

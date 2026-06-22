@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
         continue
       }
 
-      const { error: profileError } = await supabase.from('profiles').insert({
+      // Upsert: the on_auth_user_created trigger already inserted a profiles row.
+      const { error: profileError } = await supabase.from('profiles').upsert({
         id:          authData.user.id,
         full_name:   m.full_name,
         role:        'member',

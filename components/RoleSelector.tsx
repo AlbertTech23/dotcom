@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { Shield, Users, Star } from 'lucide-react'
+import { Users, Star } from 'lucide-react'
 
 type Role = 'admin' | 'committee' | 'member'
 
@@ -19,13 +19,8 @@ const ROLES: { value: Role; label: string; description: string; icon: React.Reac
     icon: <Star size={14} />,
     color: 'text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20',
   },
-  {
-    value: 'admin',
-    label: 'Admin',
-    description: 'Superadmin, no personal trip data',
-    icon: <Shield size={14} />,
-    color: 'text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20',
-  },
+  // 'admin' is intentionally NOT selectable — admins are seeded directly in the
+  // database and can never be granted through the app.
 ]
 
 export function RoleSelector({ memberId, currentRole }: { memberId: string; currentRole: Role }) {
@@ -59,7 +54,7 @@ export function RoleSelector({ memberId, currentRole }: { memberId: string; curr
         {saved && <span className="text-xs text-emerald-500 font-medium">Saved ✓</span>}
         {saving && <span className="text-xs text-slate-400">Saving…</span>}
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         {ROLES.map(r => (
           <button
             key={r.value}

@@ -17,6 +17,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const profileUpdate: Record<string, unknown> = {}
   if (body.full_name   !== undefined) profileUpdate.full_name   = body.full_name
   if (body.group_label !== undefined) profileUpdate.group_label = body.group_label
+  if (body.room_id     !== undefined) profileUpdate.room_id     = body.room_id ?? null
+  if (body.bus_number  !== undefined) profileUpdate.bus_number  = body.bus_number ?? null
 
   if (Object.keys(profileUpdate).length > 0) {
     const { error } = await supabase.from('profiles').update(profileUpdate).eq('id', id)
