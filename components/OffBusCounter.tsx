@@ -1,42 +1,31 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useState, type Dispatch, type SetStateAction } from 'react'
+import { toast } from 'sonner'
 import type { Profile } from '@/types/database'
 import { RotateCcw } from 'lucide-react'
 
-export function OffBusCounter({ initialProfiles }: { initialProfiles: Profile[] }) {
-  const [profiles, setProfiles] = useState(initialProfiles)
+// Controlled: shares profile state with the rest of the dashboard so a toggle in
+// the table instantly updates this counter (no realtime dependency).
+export function OffBusCounter({
+  profiles,
+  setProfiles,
+}: {
+  profiles: Profile[]
+  setProfiles: Dispatch<SetStateAction<Profile[]>>
+}) {
   const [resetting, setResetting] = useState(false)
 
-  // Realtime subscription
-  useEffect(() => {
-    const supabase = createClient()
-    const channel = supabase
-      .channel('profiles-counter')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' },
-        payload => {
-          if (payload.eventType === 'UPDATE') {
-            setProfiles(prev =>
-              prev.map(p => p.id === payload.new.id ? { ...p, ...payload.new } as Profile : p)
-            )
-          } else if (payload.eventType === 'INSERT') {
-            setProfiles(prev => [...prev, payload.new as Profile])
-          } else if (payload.eventType === 'DELETE') {
-            setProfiles(prev => prev.filter(p => p.id !== payload.old.id))
-          }
-        }
-      )
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [])
-
-  const offBus = profiles.filter(p => p.status === 'off_bus' && p.role === 'member')
-  const total  = profiles.filter(p => p.role === 'member').length
+  const offBus = profiles.filter(p => p.status === 'off_bus' && p.role !== 'admin')
+  const total  = profiles.filter(p => p.role !== 'admin').length
 
   async function resetAll() {
     setResetting(true)
-    await fetch('/api/admin/reset-all', { method: 'POST' })
+    const res = await fetch('/api/admin/reset-all', { method: 'POST' })
     setResetting(false)
+    if (res.ok) {
+      setProfiles(prev => prev.map(p => p.role !== 'admin' ? { ...p, status: 'on_bus' } : p))
+      toast.success('All marked on bus')
+    } else toast.error('Failed to reset')
   }
 
   return (

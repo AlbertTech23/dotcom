@@ -1,7 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { mergePrivate } from '@/lib/supabase/with-private'
-import { OffBusCounter } from '@/components/OffBusCounter'
-import { DataTable } from '@/components/DataTable'
+import { DashboardClient } from '@/components/DashboardClient'
 import { MyQrButton } from '@/components/MyQrButton'
 import type { Profile, MemberPrivate } from '@/types/database'
 
@@ -24,7 +23,8 @@ export default async function DashboardPage() {
   // to detour to /me to be scanned. Pure admins have no QR.
   const { data: { user } } = await supabase.auth.getUser()
   const { data: meData } = await supabase.from('profiles').select('role').eq('id', user?.id ?? '').single()
-  const isCommittee = (meData as Pick<Profile, 'role'> | null)?.role === 'committee'
+  const myRole = (meData as Pick<Profile, 'role'> | null)?.role
+  const isCommittee = myRole === 'committee'
   let myQrToken: string | null = null
   if (isCommittee && user) {
     const { data: priv } = await supabase.from('member_private').select('qr_token').eq('id', user.id).single()
@@ -38,14 +38,8 @@ export default async function DashboardPage() {
         {myQrToken && <MyQrButton token={myQrToken} />}
       </div>
 
-      {/* Off-bus counter (live) */}
-      <OffBusCounter initialProfiles={profiles ?? []} />
-
-      {/* Member list (live) */}
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-3">All Members</h2>
-        <DataTable initialProfiles={profiles ?? []} />
-      </div>
+      {/* Counter + table share one state so toggles update both instantly */}
+      <DashboardClient initialProfiles={profiles ?? []} />
     </div>
   )
 }

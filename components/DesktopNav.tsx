@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Logo } from '@/components/Logo'
 import { QrDisplay } from '@/components/QrDisplay'
@@ -27,6 +27,18 @@ interface Props {
 export function DesktopNav({ isStaff, homeHref, qrToken, locationSharing }: Props) {
   const pathname = usePathname()
   const [qrOpen, setQrOpen] = useState(false)
+
+  // Carry the onboarding-tour anchor IDs (#onb-scan-nav / #onb-add-member) only
+  // while this desktop bar is actually visible. The mobile bars keep the same IDs;
+  // gating here lets querySelector resolve to whichever copy is on-screen.
+  const [isDesktop, setIsDesktop] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    const update = () => setIsDesktop(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
 
   const links: { href: string; label: string; icon: LucideIcon; active: boolean }[] = [
     {
@@ -79,6 +91,7 @@ export function DesktopNav({ isStaff, homeHref, qrToken, locationSharing }: Prop
             <>
               <Link
                 href="/dashboard/scan"
+                id={isDesktop ? 'onb-scan-nav' : undefined}
                 className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-3 py-1.5 rounded-lg transition"
               >
                 <ScanLine size={16} />
@@ -86,6 +99,7 @@ export function DesktopNav({ isStaff, homeHref, qrToken, locationSharing }: Prop
               </Link>
               <Link
                 href="/dashboard/members/new"
+                id={isDesktop ? 'onb-add-member' : undefined}
                 title="Add member"
                 className="inline-flex items-center gap-1.5 border border-slate-300 dark:border-slate-600 hover:border-slate-400 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-sm font-semibold px-2.5 py-1.5 rounded-lg transition"
               >

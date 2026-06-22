@@ -1,7 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useState, type Dispatch, type SetStateAction } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
+import { toast } from 'sonner'
 import type { Profile } from '@/types/database'
 import { X, CheckCircle2, LogOut as LogOutIcon, Plus } from 'lucide-react'
 
@@ -19,10 +19,10 @@ const BUS_LAYOUT: Cell[][] = [
 ]
 
 interface Props {
-  initialProfiles: Profile[]
+  profiles: Profile[]
+  setProfiles: Dispatch<SetStateAction<Profile[]>>
   busNumber: 1 | 2
   isAdmin: boolean
-  unassignedMembers: Profile[]
   mySeatNumber?: number | null
 }
 
@@ -44,54 +44,56 @@ const seatColor: Record<SeatStatus, string> = {
   off_bus:'bg-red-100 dark:bg-red-900/50 border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/70',
 }
 
-export function BusMap({ initialProfiles, busNumber, isAdmin, unassignedMembers, mySeatNumber }: Props) {
-  const [profiles, setProfiles]           = useState(initialProfiles)
+export function BusMap({ profiles, setProfiles, busNumber, isAdmin, mySeatNumber }: Props) {
   const [selected, setSelected]           = useState<number | null>(null)
   const [assigning, setAssigning]         = useState(false)
   const [assignMemberId, setAssignMemberId] = useState('')
   const [loading, setLoading]             = useState(false)
-  const [error, setError]                 = useState('')
-
-  useEffect(() => {
-    const supabase = createClient()
-    const ch = supabase
-      .channel(`bus-map-${busNumber}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => {
-        if (payload.eventType === 'UPDATE') {
-          setProfiles(prev => prev.map(p => p.id === payload.new.id ? { ...p, ...payload.new } as Profile : p))
-        } else if (payload.eventType === 'INSERT') {
-          setProfiles(prev => [...prev, payload.new as Profile])
-        } else if (payload.eventType === 'DELETE') {
-          setProfiles(prev => prev.filter(p => p.id !== payload.old.id))
-        }
-      })
-      .subscribe()
-    return () => { supabase.removeChannel(ch) }
-  }, [busNumber])
 
   const selectedProfile = selected ? getSeatProfile(selected, profiles, busNumber) : null
 
   async function handleAssign() {
     if (!selected || !assignMemberId) return
-    setLoading(true); setError('')
-    const res = await fetch('/api/admin/seats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memberId: assignMemberId, busNumber, seatNumber: selected }) })
+    setLoading(true)
+    const seat = selected
+    const res = await fetch('/api/admin/seats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memberId: assignMemberId, busNumber, seatNumber: seat }) })
     const data = await res.json()
-    if (!res.ok) { setError(data.error); setLoading(false); return }
-    setAssigning(false); setAssignMemberId(''); setLoading(false)
+    setLoading(false)
+    if (!res.ok) { toast.error(data.error ?? 'Failed to assign seat'); return }
+    // Mutate locally so the map updates instantly (no realtime dependency): assign
+    // the member, and bump whoever was in that seat.
+    setProfiles(prev => prev.map(p => {
+      if (p.id === assignMemberId) return { ...p, bus_number: busNumber, seat_number: seat }
+      if (p.bus_number === busNumber && p.seat_number === seat) return { ...p, bus_number: null, seat_number: null }
+      return p
+    }))
+    toast.success(`Assigned to seat ${seat}`)
+    setAssigning(false); setAssignMemberId(''); setSelected(null)
   }
 
   async function handleUnassign() {
     if (!selectedProfile) return
-    setLoading(true); setError('')
-    const res = await fetch('/api/admin/seats', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memberId: selectedProfile.id }) })
+    setLoading(true)
+    const memberId = selectedProfile.id
+    const res = await fetch('/api/admin/seats', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memberId }) })
     const data = await res.json()
-    if (!res.ok) { setError(data.error); setLoading(false); return }
-    setSelected(null); setLoading(false)
+    setLoading(false)
+    if (!res.ok) { toast.error(data.error ?? 'Failed to unassign'); return }
+    // Clear the seat locally so the map updates without waiting on realtime.
+    setProfiles(prev => prev.map(p => p.id === memberId ? { ...p, bus_number: null, seat_number: null } : p))
+    toast.success('Seat cleared')
+    setSelected(null)
   }
 
   const allUnassigned = profiles.filter(p =>
-    p.role === 'member' && (p.bus_number === null || p.bus_number === busNumber) && p.seat_number === null
+    p.role !== 'admin' && (p.bus_number === null || p.bus_number === busNumber) && p.seat_number === null
   )
+  // Already-seated participants — offered so an admin can MOVE someone into the
+  // selected seat (the seats API vacates their previous seat automatically).
+  const seated = profiles.filter(p =>
+    p.role !== 'admin' && p.seat_number !== null && !(p.bus_number === busNumber && p.seat_number === selected)
+  )
+  const busLabel = (n: number | null) => (n === 1 ? 'A' : n === 2 ? 'B' : '?')
 
   const selectCls = "app-select w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 
@@ -119,7 +121,7 @@ export function BusMap({ initialProfiles, busNumber, isAdmin, unassignedMembers,
                 return (
                   <button key={ci}
                     id={isMine ? 'my-seat' : undefined}
-                    onClick={() => { setSelected(isSelected ? null : cell); setAssigning(false); setError('') }}
+                    onClick={() => { setSelected(isSelected ? null : cell); setAssigning(false) }}
                     className={`aspect-square rounded-lg border text-xs font-bold transition-all
                       ${seatColor[status]}
                       ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-white dark:ring-offset-slate-900 scale-110' : ''}
@@ -155,9 +157,13 @@ export function BusMap({ initialProfiles, busNumber, isAdmin, unassignedMembers,
         )}
       </div>
 
-      {/* Seat detail panel */}
+      {/* Seat detail — modal so it appears right where you're looking, not buried
+          below the map. Bottom-sheet on mobile, centered on desktop. */}
       {selected && (
-        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+        <div onClick={() => { setSelected(null); setAssigning(false) }}
+          className="fixed inset-0 z-[1100] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div onClick={e => e.stopPropagation()}
+            className="w-full max-w-sm bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3 shadow-2xl">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Seat {selected}</span>
             <button onClick={() => { setSelected(null); setAssigning(false) }}
@@ -209,7 +215,16 @@ export function BusMap({ initialProfiles, busNumber, isAdmin, unassignedMembers,
                 <div className="space-y-2">
                   <select value={assignMemberId} onChange={e => setAssignMemberId(e.target.value)} className={selectCls}>
                     <option value="">Select a member…</option>
-                    {allUnassigned.map(p => <option key={p.id} value={p.id}>{p.full_name}{p.student_id ? ` (${p.student_id})` : ''}</option>)}
+                    {allUnassigned.length > 0 && (
+                      <optgroup label="Unassigned">
+                        {allUnassigned.map(p => <option key={p.id} value={p.id}>{p.full_name}{p.student_id ? ` (${p.student_id})` : ''}</option>)}
+                      </optgroup>
+                    )}
+                    {seated.length > 0 && (
+                      <optgroup label="Move from another seat">
+                        {seated.map(p => <option key={p.id} value={p.id}>{p.full_name} — Bus {busLabel(p.bus_number)} seat {p.seat_number}</option>)}
+                      </optgroup>
+                    )}
                   </select>
                   <div className="flex gap-2">
                     <button onClick={() => setAssigning(false)}
@@ -226,7 +241,7 @@ export function BusMap({ initialProfiles, busNumber, isAdmin, unassignedMembers,
             </>
           )}
 
-          {error && <p className="text-xs text-red-500">{error}</p>}
+          </div>
         </div>
       )}
 

@@ -1,9 +1,10 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { toast } from 'sonner'
 import { StatusBadge } from '@/components/StatusBadge'
 import type { Profile, Room } from '@/types/database'
-import { Building2, Pencil, Trash2, X, Plus } from 'lucide-react'
+import { Building2, Pencil, Trash2, X, Plus, ChevronLeft } from 'lucide-react'
 
 interface RoomsViewProps {
   initialRooms: Room[]
@@ -32,8 +33,11 @@ export function RoomsView({ initialRooms, initialProfiles, isAdmin, myRoomId }: 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload) => {
         setProfiles(prev => {
           if (payload.eventType === 'DELETE') return prev.filter(p => p.id !== (payload.old as Profile).id)
-          if (payload.eventType === 'INSERT') return [...prev, payload.new as Profile]
-          return prev.map(p => p.id === (payload.new as Profile).id ? { ...p, ...payload.new } : p)
+          const row = payload.new as Profile
+          // Idempotent: we also update local state from mutation responses, so an
+          // INSERT/UPDATE that's already applied must not duplicate.
+          if (payload.eventType === 'INSERT') return prev.some(p => p.id === row.id) ? prev : [...prev, row]
+          return prev.map(p => p.id === row.id ? { ...p, ...row } : p)
         })
       })
       .subscribe()
@@ -42,8 +46,9 @@ export function RoomsView({ initialRooms, initialProfiles, isAdmin, myRoomId }: 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, (payload) => {
         setRooms(prev => {
           if (payload.eventType === 'DELETE') return prev.filter(r => r.id !== (payload.old as Room).id)
-          if (payload.eventType === 'INSERT') return [...prev, payload.new as Room]
-          return prev.map(r => r.id === (payload.new as Room).id ? { ...r, ...payload.new } : r)
+          const row = payload.new as Room
+          if (payload.eventType === 'INSERT') return prev.some(r => r.id === row.id) ? prev : [...prev, row]
+          return prev.map(r => r.id === row.id ? { ...r, ...row } : r)
         })
       })
       .subscribe()
@@ -61,37 +66,80 @@ export function RoomsView({ initialRooms, initialProfiles, isAdmin, myRoomId }: 
     if (!form.name.trim()) return
     setFormSaving(true)
     const body = { name: form.name.trim(), floor: form.floor.trim() || null, notes: form.notes.trim() || null, capacity: form.capacity ? parseInt(form.capacity) : null }
-    if (editRoom) {
-      await fetch(`/api/admin/rooms/${editRoom.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    } else {
-      await fetch('/api/admin/rooms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    try {
+      if (editRoom) {
+        const res = await fetch(`/api/admin/rooms/${editRoom.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        const data = await res.json()
+        if (!res.ok) { toast.error(data.error ?? 'Failed to update room'); return }
+        setRooms(prev => prev.map(r => r.id === (data as Room).id ? data as Room : r))
+        toast.success(`Room “${(data as Room).name}” updated`)
+      } else {
+        const res = await fetch('/api/admin/rooms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        const data = await res.json()
+        if (!res.ok) { toast.error(data.error ?? 'Failed to create room'); return }
+        // Update immediately from the response so the UI mutates without waiting
+        // on realtime (which requires the rooms table to be in the publication).
+        setRooms(prev => prev.some(r => r.id === (data as Room).id) ? prev : [...prev, data as Room])
+        toast.success(`Room “${(data as Room).name}” created`)
+      }
+    } finally {
+      setFormSaving(false); setShowForm(false)
     }
-    setFormSaving(false); setShowForm(false)
   }
 
   async function deleteRoom(room: Room) {
     if (!confirm(`Delete room "${room.name}"? All occupants will be unassigned.`)) return
-    await fetch(`/api/admin/rooms/${room.id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/admin/rooms/${room.id}`, { method: 'DELETE' })
+    if (res.ok) {
+      setRooms(prev => prev.filter(r => r.id !== room.id))
+      // Occupants are unassigned via FK (on delete set null) — reflect locally.
+      setProfiles(prev => prev.map(p => p.room_id === room.id ? { ...p, room_id: null } : p))
+      toast.success(`Room “${room.name}” deleted`)
+    } else {
+      toast.error('Failed to delete room')
+    }
   }
 
   async function assignMember() {
     if (!assigningRoom || !assignMemberId) return
     setAssigning(true)
-    await fetch('/api/admin/rooms/assign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memberId: assignMemberId, roomId: assigningRoom.id }) })
+    const roomId = assigningRoom.id
+    const memberId = assignMemberId
+    const res = await fetch('/api/admin/rooms/assign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memberId, roomId }) })
+    if (res.ok) { setProfiles(prev => prev.map(p => p.id === memberId ? { ...p, room_id: roomId } : p)); toast.success('Member assigned') }
+    else toast.error('Failed to assign member')
     setAssigning(false); setAssignMemberId('')
   }
 
   async function unassignMember(memberId: string) {
-    await fetch('/api/admin/rooms/assign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memberId, roomId: null }) })
+    const res = await fetch('/api/admin/rooms/assign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memberId, roomId: null }) })
+    if (res.ok) { setProfiles(prev => prev.map(p => p.id === memberId ? { ...p, room_id: null } : p)); toast.success('Removed from room') }
+    else toast.error('Failed to remove member')
   }
 
-  const members   = profiles.filter(p => p.role === 'member')
+  const members   = profiles.filter(p => p.role !== 'admin')
   const unassigned = members.filter(p => p.room_id === null)
+  const assignedCount = members.filter(p => p.room_id !== null).length
+  const backHref = isAdmin ? '/dashboard' : '/me'
 
   const inputCls = "w-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500"
 
   return (
-    <div className="space-y-4">
+    <div id="onb-rooms" className="space-y-4">
+      <div className="flex items-center gap-3">
+        <a href={backHref} className="flex items-center gap-1 text-slate-500 hover:text-slate-900 dark:hover:text-white transition text-sm flex-shrink-0">
+          <ChevronLeft size={16} />Back
+        </a>
+        <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
+        <Building2 size={20} className="text-amber-500 dark:text-amber-400 flex-shrink-0" />
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Rooms</h1>
+          <p className="text-slate-500 text-xs mt-0.5">
+            {rooms.length} room{rooms.length !== 1 ? 's' : ''} · {assignedCount} assigned
+          </p>
+        </div>
+      </div>
+
       {isAdmin && (
         <button onClick={openCreate}
           className="w-full border border-dashed border-slate-300 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-400 text-slate-500 hover:text-slate-700 dark:hover:text-white text-sm font-medium py-3 rounded-2xl transition flex items-center justify-center gap-2">

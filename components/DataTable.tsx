@@ -1,6 +1,6 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   useReactTable,
   getCoreRowModel,
@@ -11,10 +11,10 @@ import {
   type ColumnDef,
   type SortingState,
   type PaginationState,
+  type VisibilityState,
   type Column,
   type Row,
 } from '@tanstack/react-table'
-import { createClient } from '@/lib/supabase/client'
 import { StatusBadge } from './StatusBadge'
 import { formatTime } from '@/lib/utils'
 import type { Profile } from '@/types/database'
@@ -28,7 +28,18 @@ import {
   FileSpreadsheet,
   Search,
   SlidersHorizontal,
+  Columns3,
 } from 'lucide-react'
+
+// Human labels for the column on/off menu (only hideable columns).
+const COL_LABELS: Record<string, string> = {
+  student_id:      'NIM',
+  role:            'Role',
+  group_label:     'Group',
+  bus_number:      'Bus',
+  status:          'Status',
+  last_changed_at: 'Changed',
+}
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
@@ -36,6 +47,7 @@ function toExportRow(p: Profile) {
   return {
     Name:        p.full_name,
     NIM:         p.student_id ?? '',
+    Role:        p.role === 'committee' ? 'Committee' : p.role === 'admin' ? 'Admin' : 'Member',
     Group:       p.group_label ?? '',
     Status:      p.status === 'on_bus' ? 'On Bus' : 'Off Bus',
     Bus:         p.bus_number ? `Bus ${p.bus_number}` : '',
@@ -47,7 +59,7 @@ function toExportRow(p: Profile) {
 }
 
 function exportCSV(rows: Profile[]) {
-  const headers = ['Name', 'NIM', 'Group', 'Status', 'Bus', 'Seat', 'Last Changed']
+  const headers = ['Name', 'NIM', 'Role', 'Group', 'Status', 'Bus', 'Seat', 'Last Changed']
   const lines = [
     headers.join(','),
     ...rows.map(p => {
@@ -94,42 +106,52 @@ function SortHeader({ column, label }: { column: Column<Profile, unknown>; label
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
-export function DataTable({ initialProfiles }: { initialProfiles: Profile[] }) {
-  const [profiles, setProfiles] = useState(initialProfiles)
+export function DataTable({
+  profiles,
+  setProfiles,
+}: {
+  profiles: Profile[]
+  setProfiles: Dispatch<SetStateAction<Profile[]>>
+}) {
+  const router = useRouter()
   const [toggling,  setToggling]  = useState<string | null>(null)
   const [globalFilter, setGlobalFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [busFilter,    setBusFilter]    = useState('all')
   const [groupFilter,  setGroupFilter]  = useState('all')
+  const [roleFilter,   setRoleFilter]   = useState('all')
   const [sorting, setSorting]     = useState<SortingState>([])
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 25 })
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [colsOpen, setColsOpen] = useState(false)
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [colsLoaded, setColsLoaded] = useState(false)
 
-  // Realtime subscription
+  // Column show/hide prefs are device-scoped (localStorage), like the table is per-admin.
   useEffect(() => {
-    const supabase = createClient()
-    const channel = supabase
-      .channel('datatable-profiles')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => {
-        if (payload.eventType === 'UPDATE') {
-          setProfiles(prev => prev.map(p => p.id === payload.new.id ? { ...p, ...payload.new } as Profile : p))
-        } else if (payload.eventType === 'INSERT') {
-          setProfiles(prev => [...prev, payload.new as Profile])
-        } else if (payload.eventType === 'DELETE') {
-          setProfiles(prev => prev.filter(p => p.id !== payload.old.id))
-        }
-      })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
+    try {
+      const saved = localStorage.getItem('dotcom-table-cols')
+      if (saved) setColumnVisibility(JSON.parse(saved))
+    } catch { /* ignore */ }
+    setColsLoaded(true)
   }, [])
+  useEffect(() => {
+    if (colsLoaded) localStorage.setItem('dotcom-table-cols', JSON.stringify(columnVisibility))
+  }, [columnVisibility, colsLoaded])
 
   async function toggle(id: string) {
     setToggling(id)
-    await fetch(`/api/admin/toggle/${id}`, { method: 'POST' })
+    const res = await fetch(`/api/admin/toggle/${id}`, { method: 'POST' })
+    if (res.ok) {
+      const data = await res.json() as { status: 'on_bus' | 'off_bus' }
+      setProfiles(prev => prev.map(p =>
+        p.id === id ? { ...p, status: data.status, last_changed_at: new Date().toISOString() } : p))
+    }
     setToggling(null)
   }
 
-  const members = useMemo(() => profiles.filter(p => p.role === 'member'), [profiles])
+  // Members AND committee are trip participants (committee have bus/room/group data too).
+  const members = useMemo(() => profiles.filter(p => p.role !== 'admin'), [profiles])
 
   // Distinct group labels for filter dropdown
   const groups = useMemo(() => {
@@ -144,25 +166,24 @@ export function DataTable({ initialProfiles }: { initialProfiles: Profile[] }) {
     if (statusFilter !== 'all') d = d.filter(p => p.status === statusFilter)
     if (busFilter    !== 'all') d = d.filter(p => String(p.bus_number ?? '') === busFilter)
     if (groupFilter  !== 'all') d = d.filter(p => (p.group_label ?? '') === groupFilter)
+    if (roleFilter   !== 'all') d = d.filter(p => p.role === roleFilter)
     return d
-  }, [members, statusFilter, busFilter, groupFilter])
+  }, [members, statusFilter, busFilter, groupFilter, roleFilter])
 
   // Reset to page 0 when any filter/search changes
   useEffect(() => {
     setPagination(prev => ({ ...prev, pageIndex: 0 }))
-  }, [globalFilter, statusFilter, busFilter, groupFilter])
+  }, [globalFilter, statusFilter, busFilter, groupFilter, roleFilter])
 
   const columns = useMemo<ColumnDef<Profile>[]>(() => [
     {
       accessorKey: 'full_name',
+      enableHiding: false,
       header: ({ column }) => <SortHeader column={column} label="Name" />,
       cell: ({ row }) => (
-        <Link
-          href={`/dashboard/members/${row.original.id}`}
-          className="font-medium text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition"
-        >
+        <span className="font-medium text-slate-900 dark:text-white">
           {row.original.full_name}
-        </Link>
+        </span>
       ),
     },
     {
@@ -171,6 +192,19 @@ export function DataTable({ initialProfiles }: { initialProfiles: Profile[] }) {
       cell: ({ getValue }) => (
         <span className="text-slate-500 dark:text-slate-400 text-sm">{(getValue() as string) ?? '—'}</span>
       ),
+      enableGlobalFilter: false,
+    },
+    {
+      accessorKey: 'role',
+      header: ({ column }) => <SortHeader column={column} label="Role" />,
+      cell: ({ getValue }) => {
+        const r = getValue() as string
+        if (r === 'committee')
+          return <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">Committee</span>
+        if (r === 'admin')
+          return <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400">Admin</span>
+        return <span className="text-slate-400 dark:text-slate-500 text-xs">Member</span>
+      },
       enableGlobalFilter: false,
     },
     {
@@ -206,11 +240,12 @@ export function DataTable({ initialProfiles }: { initialProfiles: Profile[] }) {
     {
       id: 'actions',
       header: '',
+      enableHiding: false,
       cell: ({ row }) => {
         const p = row.original
         return (
           <button
-            onClick={() => toggle(p.id)}
+            onClick={(e) => { e.stopPropagation(); toggle(p.id) }}
             disabled={toggling === p.id}
             className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition disabled:opacity-50 whitespace-nowrap ${
               p.status === 'on_bus'
@@ -230,10 +265,11 @@ export function DataTable({ initialProfiles }: { initialProfiles: Profile[] }) {
   const table = useReactTable({
     data: displayData,
     columns,
-    state: { sorting, globalFilter, pagination },
+    state: { sorting, globalFilter, pagination, columnVisibility },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     onPaginationChange: setPagination,
+    onColumnVisibilityChange: setColumnVisibility,
     globalFilterFn: (row: Row<Profile>, _colId: string, filterValue: string) => {
       const q = filterValue.toLowerCase()
       const p = row.original
@@ -255,7 +291,8 @@ export function DataTable({ initialProfiles }: { initialProfiles: Profile[] }) {
   const activeFilterCount =
     (statusFilter !== 'all' ? 1 : 0) +
     (busFilter !== 'all' ? 1 : 0) +
-    (groupFilter !== 'all' ? 1 : 0)
+    (groupFilter !== 'all' ? 1 : 0) +
+    (roleFilter !== 'all' ? 1 : 0)
 
   const filterBtnClass = (active: boolean) =>
     `text-xs px-2.5 py-1.5 rounded-lg font-medium transition border ${
@@ -299,6 +336,40 @@ export function DataTable({ initialProfiles }: { initialProfiles: Profile[] }) {
             )}
           </button>
 
+          {/* Columns on/off */}
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={() => setColsOpen(o => !o)}
+              title="Columns"
+              className={`flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg border transition ${
+                colsOpen
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                  : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-400 bg-white dark:bg-slate-800'
+              }`}
+            >
+              <Columns3 size={14} />
+              <span className="hidden sm:inline">Columns</span>
+            </button>
+            {colsOpen && (
+              <>
+                <button aria-label="Close" onClick={() => setColsOpen(false)} className="fixed inset-0 z-[60] cursor-default" />
+                <div className="absolute right-0 mt-1 z-[61] w-44 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl p-1.5">
+                  {table.getAllLeafColumns().filter(c => c.getCanHide()).map(col => (
+                    <label key={col.id} className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={col.getIsVisible()}
+                        onChange={col.getToggleVisibilityHandler()}
+                        className="accent-blue-600"
+                      />
+                      {COL_LABELS[col.id] ?? col.id}
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
           {/* Export — icon-only on mobile, labelled on larger screens */}
           <div id="onb-export" className="flex items-center gap-1.5 flex-shrink-0">
             <button
@@ -332,6 +403,15 @@ export function DataTable({ initialProfiles }: { initialProfiles: Profile[] }) {
               ))}
             </div>
 
+            {/* Role filter */}
+            <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1">
+              {(['all', 'member', 'committee'] as const).map(r => (
+                <button key={r} onClick={() => setRoleFilter(r)} className={filterBtnClass(roleFilter === r)}>
+                  {r === 'all' ? 'All Roles' : r === 'member' ? 'Members' : 'Committee'}
+                </button>
+              ))}
+            </div>
+
             {/* Bus filter */}
             <select
               value={busFilter}
@@ -357,7 +437,7 @@ export function DataTable({ initialProfiles }: { initialProfiles: Profile[] }) {
 
             {activeFilterCount > 0 && (
               <button
-                onClick={() => { setStatusFilter('all'); setBusFilter('all'); setGroupFilter('all') }}
+                onClick={() => { setStatusFilter('all'); setBusFilter('all'); setGroupFilter('all'); setRoleFilter('all') }}
                 className="text-xs font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 px-2 py-1.5 transition"
               >
                 Clear
@@ -380,12 +460,7 @@ export function DataTable({ initialProfiles }: { initialProfiles: Profile[] }) {
           <thead>
             <tr className="bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
               {table.getFlatHeaders().map(header => (
-                <th key={header.id} className={`text-left px-4 py-3 ${
-                  header.id === 'student_id' ? 'hidden sm:table-cell' :
-                  header.id === 'group_label' ? 'hidden md:table-cell' :
-                  header.id === 'bus_number' ? 'hidden md:table-cell' :
-                  header.id === 'last_changed_at' ? 'hidden lg:table-cell' : ''
-                }`}>
+                <th key={header.id} className="text-left px-4 py-3">
                   {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                 </th>
               ))}
@@ -400,14 +475,11 @@ export function DataTable({ initialProfiles }: { initialProfiles: Profile[] }) {
               </tr>
             )}
             {pageRows.map(row => (
-              <tr key={row.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
+              <tr key={row.id}
+                onClick={() => router.push(`/dashboard/members/${row.original.id}`)}
+                className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition cursor-pointer">
                 {row.getVisibleCells().map(cell => (
-                  <td key={cell.id} className={`px-4 py-3 ${
-                    cell.column.id === 'student_id' ? 'hidden sm:table-cell' :
-                    cell.column.id === 'group_label' ? 'hidden md:table-cell' :
-                    cell.column.id === 'bus_number' ? 'hidden md:table-cell' :
-                    cell.column.id === 'last_changed_at' ? 'hidden lg:table-cell' : ''
-                  }`}>
+                  <td key={cell.id} className="px-4 py-3">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}

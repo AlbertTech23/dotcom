@@ -1,5 +1,6 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { BusMap } from '@/components/BusMap'
 import type { Profile } from '@/types/database'
 import { Bus, ChevronLeft, Crosshair } from 'lucide-react'
@@ -14,6 +15,25 @@ interface Props {
 export function BusesView({ initialProfiles, isAdmin, myBusNumber, mySeatNumber }: Props) {
   // Default to the user's own bus if assigned
   const [activeBus, setActiveBus] = useState<1 | 2>(myBusNumber ?? 1)
+  // Shared state for both bus tabs + the BusMap, so seat changes update the tab
+  // counts instantly (and one realtime subscription keeps other devices in sync).
+  const [profiles, setProfiles] = useState<Profile[]>(initialProfiles)
+
+  useEffect(() => {
+    const supabase = createClient()
+    const ch = supabase
+      .channel('buses-profiles')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => {
+        setProfiles(prev => {
+          if (payload.eventType === 'DELETE') return prev.filter(p => p.id !== (payload.old as Profile).id)
+          const row = payload.new as Profile
+          if (payload.eventType === 'INSERT') return prev.some(p => p.id === row.id) ? prev : [...prev, row]
+          return prev.map(p => p.id === row.id ? { ...p, ...row } : p)
+        })
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
 
   function jumpToMySeat() {
     if (!myBusNumber) return
@@ -23,9 +43,8 @@ export function BusesView({ initialProfiles, isAdmin, myBusNumber, mySeatNumber 
     }, 50)
   }
 
-  const unassigned = initialProfiles.filter(p => p.role === 'member' && p.seat_number === null)
-  const bus1Count  = initialProfiles.filter(p => p.bus_number === 1 && p.seat_number !== null).length
-  const bus2Count  = initialProfiles.filter(p => p.bus_number === 2 && p.seat_number !== null).length
+  const bus1Count = profiles.filter(p => p.bus_number === 1 && p.seat_number !== null).length
+  const bus2Count = profiles.filter(p => p.bus_number === 2 && p.seat_number !== null).length
 
   return (
     <div className="min-h-screen px-4 py-6 pb-24 max-w-lg mx-auto space-y-5">
@@ -77,10 +96,10 @@ export function BusesView({ initialProfiles, isAdmin, myBusNumber, mySeatNumber 
       <div id="onb-bus-map">
         <BusMap
           key={activeBus}
-          initialProfiles={initialProfiles}
+          profiles={profiles}
+          setProfiles={setProfiles}
           busNumber={activeBus}
           isAdmin={isAdmin}
-          unassignedMembers={unassigned}
           mySeatNumber={myBusNumber === activeBus ? mySeatNumber : null}
         />
       </div>

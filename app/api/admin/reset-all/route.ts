@@ -11,7 +11,7 @@ export async function POST() {
   const { error } = await supabase
     .from('profiles')
     .update({ status: 'on_bus', last_changed_at: new Date().toISOString() })
-    .eq('role', 'member')
+    .neq('role', 'admin')
     .eq('status', 'off_bus')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
