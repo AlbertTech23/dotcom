@@ -26,7 +26,9 @@ export async function middleware(request: NextRequest) {
 
   // Public routes
   if (pathname.startsWith('/login') || pathname.startsWith('/auth')) {
-    if (user) {
+    // Let the password-reset page through even with a (recovery) session — the
+    // user needs to be signed in via the recovery link to set a new password.
+    if (user && !pathname.startsWith('/auth/reset')) {
       // Redirect logged-in users away from login
       const { data: profile } = await supabase
         .from('profiles')

@@ -1,23 +1,32 @@
 'use client'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { toast } from 'sonner'
 import { Logo, LogoMark } from '@/components/Logo'
 import { ThemeToggle } from '@/components/ThemeToggle'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  async function handleForgot() {
+    if (!email) { toast.error('Enter your email above first, then tap “Forgot password”.'); return }
+    const supabase = createClient()
+    const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset`,
+    })
+    if (err) { toast.error(err.message); return }
+    toast.success('If that email exists, a reset link is on its way. Check your inbox.')
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    setError('')
     const supabase = createClient()
     const { error: err } = await supabase.auth.signInWithPassword({ email, password })
     if (err) {
-      setError(err.message)
+      toast.error(err.message)
       setLoading(false)
       return
     }
@@ -69,13 +78,13 @@ export default function LoginPage() {
               className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2.5 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
               placeholder="••••••••"
             />
-          </div>
-
-          {error && (
-            <div className="bg-red-50 dark:bg-red-900/40 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 text-sm rounded-lg px-3 py-2">
-              {error}
+            <div className="flex justify-end mt-1.5">
+              <button type="button" onClick={handleForgot}
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                Forgot password?
+              </button>
             </div>
-          )}
+          </div>
 
           <button
             type="submit"

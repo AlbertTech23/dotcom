@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { QrDisplay } from '@/components/QrDisplay'
 import { StatusBadge } from '@/components/StatusBadge'
 import { LocationToggle } from '@/components/LocationToggle'
+import { ChangePassword } from '@/components/ChangePassword'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { TourButton } from '@/components/TourButton'
 import { toWaNumber } from '@/lib/utils'
@@ -102,6 +103,11 @@ export default async function MePage() {
       {/* Location sharing toggle */}
       <div id="onb-location-toggle" className="w-full">
         <LocationToggle initialSharing={profile.location_sharing} />
+      </div>
+
+      {/* Change password */}
+      <div className="w-full flex justify-center">
+        <ChangePassword />
       </div>
 
       {/* Quick links */}
