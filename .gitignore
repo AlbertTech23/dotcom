@@ -1,0 +1,18 @@
+# env (secrets)
+.env
+.env.local
+.env*.local
+
+# dependencies / build output
+node_modules/
+.next/
+out/
+build/
+
+# typescript / tooling caches
+*.tsbuildinfo
+
+# os / editor cruft
+.DS_Store
+*.pem
+npm-debug.log*

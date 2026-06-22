@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* QR scanner viewfinder — make Html5Qrcode video fill the container */
+#qr-viewfinder video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 1rem !important;
+}
+/* The processing canvas is invisible; hide it so it doesn't displace layout */
+#qr-viewfinder canvas {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Compact table rows */
+table { border-collapse: collapse; }
+
+/* Native <select> with a consistent custom chevron. The default OS arrow renders
+   in a wide right-side button that looks detached from our rounded inputs, so we
+   hide it and draw our own chevron with controlled right padding/position. */
+select.app-select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.55rem center;
+  background-size: 14px;
+  padding-right: 1.85rem;
+}
+/* Hide the legacy arrow in IE/old Edge */
+select.app-select::-ms-expand { display: none; }
+
+/* Page transition */
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page-transition {
+  animation: page-in 0.18s ease-out;
+}

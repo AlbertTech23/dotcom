@@ -1,0 +1,85 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { requireAdmin } from '@/lib/supabase/require-admin'
+
+interface MemberRow {
+  email: string
+  password: string
+  full_name: string
+  student_id?: string
+  phone?: string
+  group_label?: string
+}
+
+export async function POST(req: NextRequest) {
+  const supabase = await createClient()
+
+  const denied = await requireAdmin(supabase)
+  if (denied) return denied
+
+  const { members }: { members: MemberRow[] } = await req.json()
+
+  if (!Array.isArray(members) || members.length === 0) {
+    return NextResponse.json({ error: 'members array is required and must not be empty' }, { status: 400 })
+  }
+
+  const admin = createAdminClient()
+  const results: { email: string; success: boolean; error?: string }[] = []
+
+  for (const m of members) {
+    if (!m.email || !m.password || !m.full_name) {
+      results.push({ email: m.email ?? '(unknown)', success: false, error: 'Missing required fields' })
+      continue
+    }
+
+    try {
+      const { data: authData, error: authError } = await admin.auth.admin.createUser({
+        email:         m.email,
+        password:      m.password,
+        email_confirm: true,
+      })
+
+      if (authError || !authData.user) {
+        results.push({ email: m.email, success: false, error: authError?.message ?? 'Auth error' })
+        continue
+      }
+
+      const { error: profileError } = await supabase.from('profiles').insert({
+        id:          authData.user.id,
+        full_name:   m.full_name,
+        role:        'member',
+        group_label: m.group_label ?? null,
+      })
+
+      if (profileError) {
+        await admin.auth.admin.deleteUser(authData.user.id)
+        results.push({ email: m.email, success: false, error: profileError.message })
+        continue
+      }
+
+      // Sensitive fields go to member_private (upsert: trigger may have seeded the row).
+      const { error: privateError } = await admin
+        .from('member_private')
+        .upsert({ id: authData.user.id, student_id: m.student_id ?? null, phone: m.phone ?? null })
+
+      if (privateError) {
+        await admin.auth.admin.deleteUser(authData.user.id)
+        results.push({ email: m.email, success: false, error: privateError.message })
+        continue
+      }
+
+      results.push({ email: m.email, success: true })
+    } catch (e) {
+      results.push({ email: m.email, success: false, error: String(e) })
+    }
+  }
+
+  const failed = results.filter(r => !r.success)
+  return NextResponse.json({
+    total:   members.length,
+    created: results.filter(r => r.success).length,
+    failed:  failed.length,
+    errors:  failed,
+  })
+}

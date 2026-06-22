@@ -1,0 +1,157 @@
+# DOTCOM — DOTA Companion
+
+**DOTCOM** (short for *DOTA Companion*) is a mobile-first web app for tracking bus attendance during the ACES DOTA REBOOT 2026 college trip. Admins can manage the member roster, toggle on/off-bus status, and scan QR codes. Members get a personal QR code page to show the committee.
+
+---
+
+## Features
+
+- **Admin dashboard** — live off-bus counter, searchable member table with real-time updates via Supabase Realtime
+- **QR scan** — admin opens camera, scans a member's QR code, status flips instantly with haptic feedback
+- **Member page** — each member sees their name, current status, and personal QR code
+- **Bulk import** — POST a JSON array to `/api/admin/import` to create many members at once
+- **Audit log** — every status change is recorded in `status_logs`
+- **PWA-ready** — installable on Android/iOS via `manifest.json`
+
+---
+
+## Tech stack
+
+| Layer | Choice |
+|---|---|
+| Framework | Next.js 15 (App Router) |
+| Auth + DB | Supabase (Postgres + Auth + RLS + Realtime) |
+| Styling | Tailwind CSS |
+| QR display | qrcode.react |
+| QR scan | html5-qrcode |
+| Hosting | Vercel (recommended) |
+
+---
+
+## Local setup
+
+### 1. Clone and install
+
+```bash
+git clone <repo-url>
+cd aces-dota-reboot-2026
+npm install
+```
+
+### 2. Create a Supabase project
+
+1. Go to [supabase.com](https://supabase.com) → New project
+2. Note your **Project URL**, **Anon key**, and **Service role key** (Settings → API)
+
+### 3. Run the schema
+
+Open the Supabase **SQL Editor** and paste the contents of `supabase/schema.sql`, then run it.
+
+This creates:
+- `profiles` table (linked to `auth.users`)
+- `status_logs` table
+- `is_admin()` security-definer function
+- RLS policies for admin and member access
+- Realtime enabled on `profiles`
+
+### 4. Create your `.env.local`
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
+
+### 5. Create the first admin account
+
+Option A — Supabase dashboard:
+1. Go to **Authentication → Users → Add user**
+2. Fill in email + password
+3. In **Table Editor → profiles**, find that user's row and set `role = 'admin'`
+
+Option B — SQL:
+```sql
+update public.profiles set role = 'admin' where id = '<user-uuid>';
+```
+
+### 6. Start dev server
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). Log in with your admin account and you'll land on the dashboard.
+
+---
+
+## Adding members
+
+**Manual (one at a time):** Dashboard → + Member → fill the form.
+
+**Bulk import:** Send a POST to `/api/admin/import` with a JSON body:
+
+```json
+{
+  "members": [
+    { "email": "budi@umn.ac.id", "password": "secret123", "full_name": "Budi Santoso", "student_id": "00000012345", "group_label": "Bus A" },
+    { "email": "ani@umn.ac.id",  "password": "secret456", "full_name": "Ani Rahayu",   "student_id": "00000067890", "group_label": "Bus B" }
+  ]
+}
+```
+
+Response includes per-row success/failure so you can see which ones failed.
+
+---
+
+## Deployment (Vercel)
+
+1. Push to GitHub
+2. Import the repo in [vercel.com](https://vercel.com)
+3. Add the three env vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) in **Project Settings → Environment Variables**
+4. Deploy — Vercel auto-detects Next.js
+
+For the PWA icons (`/public/icon-192.png` and `/public/icon-512.png`), add your own images before deploying so the install prompt works correctly.
+
+---
+
+## Project structure
+
+```
+app/
+  api/admin/
+    toggle/[id]/   POST — flip member status
+    scan/          POST — lookup by qr_token + toggle
+    reset-all/     POST — set all members back to on_bus
+    members/       POST — create single member
+    members/[id]/  PATCH / DELETE — edit or remove member
+    import/        POST — bulk create members
+  auth/callback/   Supabase auth redirect handler
+  dashboard/       Admin pages (overview, scan, member detail)
+  login/           Login page
+  me/              Member QR page
+components/
+  OffBusCounter    Live counter with realtime subscription
+  MemberTable      Searchable table with toggle buttons
+  QrDisplay        Member's personal QR code
+  QrScanner        Camera-based QR scanner
+  MemberForm       Create / edit member form
+  StatusBadge      On bus / Off bus pill
+lib/supabase/
+  client.ts        Browser Supabase client
+  server.ts        Server Supabase client (with cookie handling)
+  admin.ts         Service role client (server-only)
+supabase/
+  schema.sql       Full DB schema — run this first
+```
+
+---
+
+## Environment variables reference
+
+| Variable | Where to find it |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Settings → API → Project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API → anon public |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API → service_role secret |
+
+> **Never commit `.env.local` to git.** The service role key bypasses all RLS — keep it server-side only.

@@ -1,0 +1,39 @@
+import { NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/supabase/require-admin'
+
+export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const supabase = await createClient()
+
+  const denied = await requireAdmin(supabase)
+  if (denied) return denied
+
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const { data: profile, error } = await supabase
+    .from('profiles')
+    .select('status, full_name')
+    .eq('id', id)
+    .single()
+
+  if (error || !profile) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+
+  const newStatus = profile.status === 'on_bus' ? 'off_bus' : 'on_bus'
+  const action    = newStatus === 'off_bus' ? 'out' : 'in'
+
+  const { error: updateError } = await supabase
+    .from('profiles')
+    .update({ status: newStatus, last_changed_at: new Date().toISOString() })
+    .eq('id', id)
+
+  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
+
+  await supabase.from('status_logs').insert({
+    member_id:  id,
+    action,
+    changed_by: user!.id,
+  })
+
+  return NextResponse.json({ success: true, status: newStatus, action, full_name: profile.full_name })
+}
