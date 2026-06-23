@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { mergePrivate } from '@/lib/supabase/with-private'
 import { DashboardClient } from '@/components/DashboardClient'
 import { MyQrButton } from '@/components/MyQrButton'
+import { exitAdminView } from '@/app/actions/admin-view'
+import { UserCircle } from 'lucide-react'
 import type { Profile, MemberPrivate } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -37,6 +39,26 @@ export default async function DashboardPage() {
         <h1 id="onb-admin-header" className="text-2xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
         {myQrToken && <MyQrButton token={myQrToken} />}
       </div>
+
+      {/* Committee: a prominent in-page switch back to the personal view. The nav
+          bars also carry it, but this makes it discoverable on mobile. */}
+      {isCommittee && (
+        <form action={exitAdminView} className="md:hidden">
+          <button type="submit"
+            className="w-full flex items-center justify-between gap-3 rounded-2xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-left transition active:scale-[0.99]">
+            <span className="flex items-center gap-2.5">
+              <span className="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                <UserCircle size={18} />
+              </span>
+              <span>
+                <span className="block text-sm font-semibold text-slate-900 dark:text-white">Admin View</span>
+                <span className="block text-xs text-amber-700 dark:text-amber-400">Tap to switch to your personal view</span>
+              </span>
+            </span>
+            <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Switch →</span>
+          </button>
+        </form>
+      )}
 
       {/* Counter + table share one state so toggles update both instantly */}
       <DashboardClient initialProfiles={profiles ?? []} />
