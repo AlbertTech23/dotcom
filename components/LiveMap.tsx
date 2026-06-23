@@ -324,7 +324,11 @@ export default function LiveMap({ initialProfiles, initialMarkers, isPrivileged 
       </MapContainer>
 
       {/* ── Toolbar (left, below the floating header) ── */}
-      <div className="absolute top-20 left-3 z-[600] flex flex-col gap-2">
+      {/* Outer wrapper holds the absolute placement; the inner (static) div carries
+          the onboarding anchor — Onborda forces position:relative on the highlighted
+          element, which would knock an absolutely-positioned target out of place. */}
+      <div className="absolute top-20 left-3 z-[600]">
+        <div id="onb-map-tools" className="flex flex-col gap-2">
         <button
           onClick={() => setFilterOpen(o => !o)}
           title="Filter map"
@@ -345,6 +349,7 @@ export default function LiveMap({ initialProfiles, initialMarkers, isPrivileged 
         </button>
         {isPrivileged && (
           <button
+            id="onb-add-pin"
             onClick={() => setMode(mode === 'placing' ? 'idle' : 'placing')}
             title="Add a pin"
             className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg transition ${
@@ -354,6 +359,7 @@ export default function LiveMap({ initialProfiles, initialMarkers, isPrivileged 
             <Plus size={20} />
           </button>
         )}
+        </div>
       </div>
 
       {/* ── Filter panel (tap outside or the filter icon again to close) ── */}

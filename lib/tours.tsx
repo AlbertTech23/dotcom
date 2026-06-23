@@ -108,7 +108,7 @@ export const tours: Tour[] = [
           </p>
         ),
         selector: '#onb-scan-nav',
-        side: 'top',
+        side: 'bottom',
         showControls: true,
         pointerPadding: 8,
         pointerRadius: 12,
@@ -167,12 +167,44 @@ export const tours: Tour[] = [
         title: 'Live Map',
         content: (
           <p>
-            Members who enable location sharing appear as pins on this map.
-            Useful for knowing where people are during free time.
+            Members sharing their location show up as live pins. Committee can drop
+            their own pins too — meeting points, rest stops, hazards.
           </p>
         ),
         selector: '#onb-map',
         side: 'bottom',
+        showControls: true,
+        pointerPadding: 8,
+        pointerRadius: 12,
+      },
+      {
+        icon: '➕',
+        title: 'Add a pin',
+        content: (
+          <p>
+            Tap <strong>+</strong> to drop a pin — try it now. You can tap the map
+            or paste a <strong>Google Maps link</strong>, pick an icon, and choose
+            <strong> public</strong> (everyone) or <strong>private</strong> (committee only).
+          </p>
+        ),
+        selector: '#onb-add-pin',
+        side: 'right',
+        showControls: true,
+        pointerPadding: 8,
+        pointerRadius: 12,
+      },
+      {
+        icon: '📏',
+        title: 'Measure, route & filter',
+        content: (
+          <p>
+            Tap the <strong>ruler</strong> to measure between any two points or pins,
+            then <strong>Route by road</strong> for driving distance and ETA. The
+            <strong> filter</strong> controls what shows — places, pins, members, labels.
+          </p>
+        ),
+        selector: '#onb-map-tools',
+        side: 'right',
         showControls: true,
         pointerPadding: 8,
         pointerRadius: 12,
@@ -313,8 +345,8 @@ export const tours: Tour[] = [
         title: 'Live Map',
         content: (
           <p>
-            See where trip members are in real-time — only those who have
-            location sharing turned on appear here.
+            See trip members in real-time (those sharing location), plus committee
+            pins like meeting points and rest stops.
           </p>
         ),
         selector: '#onb-map',
@@ -322,8 +354,25 @@ export const tours: Tour[] = [
         showControls: true,
         pointerPadding: 8,
         pointerRadius: 12,
+      },
+      {
+        icon: '📏',
+        title: 'Measure & filter',
+        content: (
+          <p>
+            Tap the <strong>ruler</strong> to measure distance between two points or
+            pins — add <strong>Route by road</strong> for driving distance and ETA.
+            Use the <strong>filter</strong> to choose what shows on the map.
+          </p>
+        ),
+        selector: '#onb-map-tools',
+        side: 'bottom',
+        showControls: true,
+        pointerPadding: 8,
+        pointerRadius: 12,
         nextRoute: '/me',
       },
+
       {
         icon: '🎉',
         title: "You're good to go!",

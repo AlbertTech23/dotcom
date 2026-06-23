@@ -15,14 +15,20 @@ export function OnboardingController() {
   useEffect(() => {
     const tour = pathname === '/dashboard' ? 'admin' : pathname === '/me' ? 'member' : null
     if (!tour) return
-    if (localStorage.getItem(`dotcom-tour-seen:${tour}`)) return
-    // A tour's final step routes back to its landing page (/me or /dashboard).
-    // If one is already running, don't auto-start again — that would reset it to
-    // step 1 instead of letting it finish.
-    if (isOnbordaVisible) return
 
-    // Only auto-start on the relevant landing page; delay so the page settles.
-    const timer = setTimeout(() => startOnborda(tour), 800)
+    // Explicit replay: the ? button on another page routes here with ?tour=… —
+    // honour it even if the tour was seen before, then strip the param.
+    const forced = new URLSearchParams(window.location.search).get('tour') === tour
+    if (forced) window.history.replaceState(null, '', window.location.pathname)
+
+    // A tour's final step routes back to its landing page. If one is already
+    // running, don't auto-start again — that would reset it to step 1.
+    if (isOnbordaVisible) return
+    // Auto-start only once per device, but a forced replay bypasses the flag.
+    if (!forced && localStorage.getItem(`dotcom-tour-seen:${tour}`)) return
+
+    // Delay so the page settles before the first step anchors.
+    const timer = setTimeout(() => startOnborda(tour), forced ? 500 : 800)
     return () => clearTimeout(timer)
   }, [startOnborda, isOnbordaVisible, pathname])
 
