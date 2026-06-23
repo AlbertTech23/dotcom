@@ -79,8 +79,49 @@ function exportCSV(rows: Profile[]) {
 }
 
 async function exportExcel(rows: Profile[]) {
-  const XLSX = await import('xlsx')
-  const ws = XLSX.utils.json_to_sheet(rows.map(toExportRow))
+  // xlsx-js-style writes cell styles that the plain xlsx writer would drop.
+  const XLSX = (await import('xlsx-js-style')).default
+  const data = rows.map(toExportRow)
+  const headers = ['Name', 'NIM', 'Role', 'Group', 'Status', 'Bus', 'Seat', 'Last Changed']
+  const ws = XLSX.utils.json_to_sheet(data, { header: headers })
+
+  ws['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 8 }, { wch: 6 }, { wch: 22 }]
+  ws['!autofilter'] = { ref: `A1:${XLSX.utils.encode_col(headers.length - 1)}1` }
+
+  const thin = { style: 'thin', color: { rgb: 'E2E8F0' } }
+  const border = { top: thin, bottom: thin, left: thin, right: thin }
+
+  // Header band: dark slate + white bold.
+  headers.forEach((_, c) => {
+    const cell = ws[XLSX.utils.encode_cell({ r: 0, c })]
+    if (cell) cell.s = {
+      font: { bold: true, color: { rgb: 'FFFFFF' } },
+      fill: { patternType: 'solid', fgColor: { rgb: '334155' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border,
+    }
+  })
+
+  // Body: thin borders throughout; tint the Status column green/red at a glance.
+  const statusCol = headers.indexOf('Status')
+  data.forEach((row, i) => {
+    const r = i + 1
+    headers.forEach((_, c) => {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })]
+      if (cell) cell.s = { border, alignment: { vertical: 'center' } }
+    })
+    const sc = ws[XLSX.utils.encode_cell({ r, c: statusCol })]
+    if (sc) {
+      const onBus = row.Status === 'On Bus'
+      sc.s = {
+        border,
+        alignment: { horizontal: 'center', vertical: 'center' },
+        font: { bold: true, color: { rgb: onBus ? '047857' : 'B91C1C' } },
+        fill: { patternType: 'solid', fgColor: { rgb: onBus ? 'D1FAE5' : 'FEE2E2' } },
+      }
+    }
+  })
+
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Members')
   XLSX.writeFile(wb, 'members.xlsx')
