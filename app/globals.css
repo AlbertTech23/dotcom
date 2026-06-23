@@ -103,6 +103,18 @@ table { border-collapse: collapse; }
   .leaflet-bottom.leaflet-right { margin-bottom: 20px; }
 }
 
+/* Leaflet popups — match the app's card style (rounded, dark-mode aware) so a
+   tapped pin reads as a small card rather than the plain default bubble. */
+.leaflet-popup-content-wrapper {
+  border-radius: 14px;
+  box-shadow: 0 12px 32px -12px rgba(15, 23, 42, 0.45);
+}
+.leaflet-popup-content { margin: 12px 14px; line-height: 1.35; }
+.leaflet-popup-content a { text-decoration: none; }
+html.dark .leaflet-popup-content-wrapper,
+html.dark .leaflet-popup-tip { background: #1e293b; color: #e2e8f0; }
+html.dark .leaflet-popup-close-button { color: #94a3b8; }
+
 /* Native <select> with a consistent custom chevron. The default OS arrow renders
    in a wide right-side button that looks detached from our rounded inputs, so we
    hide it and draw our own chevron with controlled right padding/position. */
