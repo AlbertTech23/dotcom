@@ -32,6 +32,7 @@ export default async function MapPage() {
       initialMarkers={markers}
       isPrivileged={isPrivileged}
       initialSharing={me?.location_sharing ?? false}
+      myId={user.id}
     />
   )
 }

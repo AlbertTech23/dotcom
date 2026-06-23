@@ -1,7 +1,9 @@
 'use client'
+import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import { MapPin, ChevronLeft } from 'lucide-react'
+import { MapPin, ChevronLeft, Users } from 'lucide-react'
 import { NavLocationToggle } from '@/components/NavLocationToggle'
+import { createClient } from '@/lib/supabase/client'
 import type { Profile, MapMarker } from '@/types/database'
 
 const LiveMap = dynamic(() => import('@/components/LiveMap'), {
@@ -21,10 +23,46 @@ interface Props {
   initialMarkers: MapMarker[]
   isPrivileged: boolean
   initialSharing: boolean
+  myId: string
 }
 
-export function MapView({ initialProfiles, initialMarkers, isPrivileged, initialSharing }: Props) {
-  const sharingCount = initialProfiles.filter(p => p.location_sharing).length
+export function MapView({ initialProfiles, initialMarkers, isPrivileged, initialSharing, myId }: Props) {
+  // Own the live profiles here (single realtime subscription) so the header count
+  // and the map pins share one source — the count now updates the instant anyone
+  // toggles sharing. The roster query only returns sharers, so this list stays the
+  // set of sharing members (UPDATE drops anyone who turns sharing off).
+  const [profiles, setProfiles] = useState(initialProfiles)
+  useEffect(() => {
+    const supabase = createClient()
+    const ch = supabase
+      .channel('map-profiles')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => {
+        if (payload.eventType === 'UPDATE') {
+          setProfiles(prev => {
+            const updated = payload.new as Profile
+            if (!updated.location_sharing) return prev.filter(p => p.id !== updated.id)
+            const exists = prev.find(p => p.id === updated.id)
+            return exists ? prev.map(p => p.id === updated.id ? { ...p, ...updated } : p) : [...prev, updated]
+          })
+        } else if (payload.eventType === 'DELETE') {
+          setProfiles(prev => prev.filter(p => p.id !== (payload.old as Profile).id))
+        }
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
+
+  // Track my own sharing locally so the count reacts instantly to my own toggle
+  // (independent of realtime delivery). Others come from the realtime `profiles`
+  // list; exclude myself there to avoid double-counting.
+  const [mySharing, setMySharing] = useState(initialSharing)
+  useEffect(() => {
+    function onSync(e: Event) { setMySharing((e as CustomEvent<boolean>).detail) }
+    window.addEventListener('dotcom:location-sharing', onSync)
+    return () => window.removeEventListener('dotcom:location-sharing', onSync)
+  }, [])
+
+  const sharingCount = profiles.filter(p => p.id !== myId && p.location_sharing).length + (mySharing ? 1 : 0)
 
   return (
     // Map fills the available canvas; all UI floats over it as absolute overlays.
@@ -35,33 +73,39 @@ export function MapView({ initialProfiles, initialMarkers, isPrivileged, initial
 
       {/* ── Map fills the entire container ── */}
       <div className="absolute inset-0">
-        <LiveMap initialProfiles={initialProfiles} initialMarkers={initialMarkers} isPrivileged={isPrivileged} />
+        <LiveMap profiles={profiles} initialMarkers={initialMarkers} isPrivileged={isPrivileged} />
       </div>
 
-      {/* ── Floating header ── */}
-      <div className="absolute top-0 left-0 right-0 z-[500] pointer-events-none">
-        <div className="px-4 pt-4 pb-3 flex items-center justify-between bg-gradient-to-b from-slate-900/70 to-transparent">
-          <div id="onb-map" className="flex items-center gap-2 pointer-events-auto">
-            <MapPin size={18} className="text-emerald-400 flex-shrink-0" />
-            <div>
-              <h1 className="text-base font-bold text-white leading-tight">Live Map</h1>
-              <p className="text-white/60 text-xs">
-                {`${sharingCount} member${sharingCount !== 1 ? 's' : ''} sharing`}
-              </p>
+      {/* ── Floating header — chips so everything stays readable over the light
+            basemap; Back on the left to match the other pages. ── */}
+      <div className="absolute top-0 left-0 right-0 z-[500] pointer-events-none px-3 pt-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 pointer-events-auto">
+            <a
+              href={isPrivileged ? '/dashboard' : '/me'}
+              className="flex items-center gap-1 bg-white/95 dark:bg-slate-800/95 backdrop-blur shadow-md rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white transition"
+            >
+              <ChevronLeft size={16} />Back
+            </a>
+            <div id="onb-map" className="flex items-center gap-2.5 bg-white/95 dark:bg-slate-800/95 backdrop-blur shadow-md rounded-lg px-3 py-1.5">
+              <MapPin size={16} className="text-emerald-500 flex-shrink-0" />
+              <h1 className="text-sm font-bold text-slate-900 dark:text-white">Live Map</h1>
+              <span title={`${sharingCount} sharing location · live`} className="flex items-center gap-1.5 text-[11px] font-semibold rounded-full pl-1.5 pr-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
+                <span className="relative flex h-2 w-2" aria-hidden>
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+                </span>
+                <Users size={12} />
+                {sharingCount}
+              </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 pointer-events-auto">
-            {isPrivileged && (
-              <NavLocationToggle initialSharing={initialSharing} />
-            )}
-            <a
-              href={isPrivileged ? '/dashboard' : '/me'}
-              className="inline-flex items-center gap-1 text-white/70 hover:text-white text-sm transition"
-            >
-              <ChevronLeft size={14} />Back
-            </a>
-          </div>
+          {isPrivileged && (
+            <div className="pointer-events-auto">
+              <NavLocationToggle initialSharing={initialSharing} floating />
+            </div>
+          )}
         </div>
       </div>
 

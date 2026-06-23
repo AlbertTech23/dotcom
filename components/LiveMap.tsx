@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import { MarkerForm } from '@/components/MarkerForm'
 import type { Profile, MapMarker } from '@/types/database'
 import { formatTime, gmapsUrl } from '@/lib/utils'
-import { Plus, Ruler, X, Trash2, Pencil, SlidersHorizontal } from 'lucide-react'
+import { Plus, Ruler, X, Trash2, Pencil, SlidersHorizontal, MapPin } from 'lucide-react'
 
 // Custom circle marker — avoids the default Leaflet icon image issue
 function makeIcon(status: 'on_bus' | 'off_bus') {
@@ -71,15 +71,16 @@ function MapClicks({ onClick }: { onClick: (lat: number, lng: number) => void })
 const DEFAULT_CENTER: [number, number] = [-6.4709, 106.772]
 
 interface Props {
-  initialProfiles: Profile[]
+  // Live profiles owned by MapView (single realtime subscription) so the header
+  // sharing count and the map pins stay in sync. Read-only here.
+  profiles: Profile[]
   initialMarkers: MapMarker[]
   isPrivileged: boolean
 }
 
 type Mode = 'idle' | 'placing' | 'ruler'
 
-export default function LiveMap({ initialProfiles, initialMarkers, isPrivileged }: Props) {
-  const [profiles, setProfiles] = useState(initialProfiles)
+export default function LiveMap({ profiles, initialMarkers, isPrivileged }: Props) {
   const [markers, setMarkers] = useState(initialMarkers)
   const [mode, setMode] = useState<Mode>('idle')
   const [rulerPts, setRulerPts] = useState<{ lat: number; lng: number }[]>([])
@@ -100,27 +101,6 @@ export default function LiveMap({ initialProfiles, initialMarkers, isPrivileged 
     { key: 'members' as const, label: 'Members' },
     { key: 'labels' as const, label: 'Labels' },
   ]
-
-  // Realtime — member pins
-  useEffect(() => {
-    const supabase = createClient()
-    const ch = supabase
-      .channel('live-map')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => {
-        if (payload.eventType === 'UPDATE') {
-          setProfiles(prev => {
-            const updated = payload.new as Profile
-            if (!updated.location_sharing) return prev.filter(p => p.id !== updated.id)
-            const exists = prev.find(p => p.id === updated.id)
-            return exists ? prev.map(p => p.id === updated.id ? { ...p, ...updated } : p) : [...prev, updated]
-          })
-        } else if (payload.eventType === 'DELETE') {
-          setProfiles(prev => prev.filter(p => p.id !== payload.old.id))
-        }
-      })
-      .subscribe()
-    return () => { supabase.removeChannel(ch) }
-  }, [])
 
   // Realtime — map markers. Defense-in-depth: never surface a private pin to a
   // non-privileged viewer even if a realtime event slips through.
@@ -242,9 +222,15 @@ export default function LiveMap({ initialProfiles, initialMarkers, isPrivileged 
             <Tooltip permanent={filters.labels} direction="top" offset={[0, -24]}>{place.name}</Tooltip>
             {mode !== 'ruler' && (
               <Popup>
-                <div className="space-y-1.5">
-                  <p className="text-sm font-semibold">{place.name}</p>
-                  <a href={place.gmaps} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 font-medium hover:underline">Open in Google Maps ↗</a>
+                <div className="min-w-[160px]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xl leading-none">{place.emoji}</span>
+                    <p className="text-sm font-bold text-slate-900 dark:text-white">{place.name}</p>
+                  </div>
+                  <a href={place.gmaps} target="_blank" rel="noopener noreferrer" style={{ color: '#fff' }}
+                    className="flex items-center justify-center gap-1 w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold py-1.5 rounded-lg transition">
+                    <MapPin size={12} /> Open in Google Maps
+                  </a>
                 </div>
               </Popup>
             )}
@@ -262,22 +248,26 @@ export default function LiveMap({ initialProfiles, initialMarkers, isPrivileged 
             <Tooltip permanent={filters.labels} direction="top" offset={[0, -24]}>{m.label}</Tooltip>
             {mode !== 'ruler' && (
             <Popup>
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-semibold">{m.label}</p>
+              <div className="min-w-[180px]">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xl leading-none">{m.icon}</span>
+                  <p className="flex-1 text-sm font-bold text-slate-900 dark:text-white">{m.label}</p>
                   {isPrivileged && (
-                    <span className={`text-[9px] font-bold uppercase rounded px-1 py-0.5 ${m.visibility === 'private' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                    <span className={`text-[9px] font-bold uppercase rounded px-1.5 py-0.5 ${m.visibility === 'private' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'}`}>
                       {m.visibility}
                     </span>
                   )}
                 </div>
-                <a href={m.source_url || gmapsUrl(m.latitude, m.longitude)} target="_blank" rel="noopener noreferrer" className="block text-xs text-blue-600 font-medium hover:underline">Open in Google Maps ↗</a>
+                <a href={m.source_url || gmapsUrl(m.latitude, m.longitude)} target="_blank" rel="noopener noreferrer" style={{ color: '#fff' }}
+                  className="flex items-center justify-center gap-1 w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold py-1.5 rounded-lg transition">
+                  <MapPin size={12} /> Open in Google Maps
+                </a>
                 {isPrivileged && (
-                  <div className="flex items-center gap-3 pt-0.5">
-                    <button onClick={() => setForm({ kind: 'edit', marker: m })} className="flex items-center gap-1 text-xs text-blue-600 font-medium hover:underline">
+                  <div className="flex gap-1.5 mt-1.5">
+                    <button onClick={() => setForm({ kind: 'edit', marker: m })} className="flex-1 flex items-center justify-center gap-1 text-xs font-semibold border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 py-1.5 rounded-lg transition">
                       <Pencil size={12} />Edit
                     </button>
-                    <button onClick={() => deleteMarker(m.id)} className="flex items-center gap-1 text-xs text-red-600 font-medium hover:underline">
+                    <button onClick={() => deleteMarker(m.id)} className="flex-1 flex items-center justify-center gap-1 text-xs font-semibold border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 py-1.5 rounded-lg transition">
                       <Trash2 size={12} />Delete
                     </button>
                   </div>
@@ -298,13 +288,14 @@ export default function LiveMap({ initialProfiles, initialMarkers, isPrivileged 
           >
             {mode !== 'ruler' && (
             <Popup>
-              <div className="space-y-0.5 text-sm">
-                <p className="font-semibold">{p.full_name}</p>
-                {p.group_label && <p className="text-slate-500 text-xs">{p.group_label}</p>}
-                <p className={`font-semibold text-xs ${p.status === 'on_bus' ? 'text-emerald-600' : 'text-red-500'}`}>
+              <div className="min-w-[150px]">
+                <p className="text-sm font-bold text-slate-900 dark:text-white">{p.full_name}</p>
+                {p.group_label && <p className="text-xs text-slate-500">{p.group_label}</p>}
+                <span className={`inline-flex items-center gap-1 mt-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full ${p.status === 'on_bus' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${p.status === 'on_bus' ? 'bg-emerald-500' : 'bg-red-500'}`} />
                   {p.status === 'on_bus' ? 'On Bus' : 'Off Bus'}
-                </p>
-                <p className="text-slate-400 text-xs">Updated {formatTime(p.location_updated_at)}</p>
+                </span>
+                <p className="text-[11px] text-slate-400 mt-1.5">Updated {formatTime(p.location_updated_at)}</p>
               </div>
             </Popup>
             )}
@@ -390,14 +381,14 @@ export default function LiveMap({ initialProfiles, initialMarkers, isPrivileged 
 
       {/* ── Mode banner (above the bottom nav) ── */}
       {mode === 'placing' && (
-        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-[600] flex items-center gap-2 bg-slate-900/85 backdrop-blur-sm text-white text-xs rounded-full pl-4 pr-2 py-2 shadow-lg whitespace-nowrap">
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[600] flex items-center gap-2 bg-slate-900/85 backdrop-blur-sm text-white text-xs rounded-full pl-4 pr-2 py-2 shadow-lg whitespace-nowrap">
           Tap the map to place a pin
           <button onClick={() => { setMode('idle'); setForm({ kind: 'create', latLng: null }) }} className="font-semibold bg-white/15 hover:bg-white/25 rounded-full px-2.5 py-1 transition">Add by link</button>
           <button onClick={() => setMode('idle')} aria-label="Cancel" className="text-white/70 hover:text-white p-1"><X size={14} /></button>
         </div>
       )}
       {mode === 'ruler' && (
-        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-[600] flex flex-col items-center gap-1.5">
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[600] flex flex-col items-center gap-1.5">
           <div className="flex items-center gap-2.5 bg-slate-900/85 backdrop-blur-sm text-white text-xs rounded-full pl-4 pr-2 py-2 shadow-lg whitespace-nowrap">
             {routeInfo ? (
               <span className="font-semibold">{formatDistance(routeInfo.distance)} · ~{formatDuration(routeInfo.duration)} <span className="font-normal text-white/60">by road</span></span>

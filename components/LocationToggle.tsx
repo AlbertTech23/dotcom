@@ -56,6 +56,17 @@ export function LocationToggle({ initialSharing }: { initialSharing: boolean }) 
     return () => { stopPinging(); document.removeEventListener('visibilitychange', onVisibility) }
   }, [sharing, startPinging, stopPinging])
 
+  // Stay in sync with the navbar/map sharing controls in the same tab.
+  useEffect(() => {
+    function onSync(e: Event) {
+      const next = (e as CustomEvent<boolean>).detail
+      setSharing(next)
+      if (!next) setStatus('idle')
+    }
+    window.addEventListener('dotcom:location-sharing', onSync)
+    return () => window.removeEventListener('dotcom:location-sharing', onSync)
+  }, [])
+
   async function toggle() {
     setLoading(true)
     const next = !sharing
@@ -67,6 +78,7 @@ export function LocationToggle({ initialSharing }: { initialSharing: boolean }) 
     if (res.ok) {
       setSharing(next)
       if (!next) setStatus('idle')
+      window.dispatchEvent(new CustomEvent('dotcom:location-sharing', { detail: next }))
     }
     setLoading(false)
   }
