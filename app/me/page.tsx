@@ -9,7 +9,7 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 import { TourButton } from '@/components/TourButton'
 import { Logo } from '@/components/Logo'
 import { AdminViewGate } from '@/components/AdminViewGate'
-import { toWaNumber } from '@/lib/utils'
+import { ContactPanitia } from '@/components/ContactPanitia'
 import type { Profile, MemberPrivate } from '@/types/database'
 import { Armchair, MapPin, Users, Building2, LogOut } from 'lucide-react'
 
@@ -35,25 +35,28 @@ export default async function MePage() {
     .single()
   const priv = privData as Pick<MemberPrivate, 'qr_token' | 'student_id'> | null
 
-  // Contact-committee button needs an admin's phone, which members can no longer
-  // read (it's private). Resolve it server-side with the admin client and hand
-  // back only that single contact — not the whole table.
+  // Panitia (committee) contact directory. Phones live in member_private, which
+  // members can't read via RLS, so resolve names/group/phone server-side with the
+  // admin client and hand back only the committee contacts — never other PII.
   const admin = createAdminClient()
-  const { data: adminsData } = await admin.from('profiles').select('id, full_name').eq('role', 'admin')
-  const admins = (adminsData ?? []) as Pick<Profile, 'id' | 'full_name'>[]
-  let adminContact: { full_name: string; phone: string } | null = null
-  if (admins.length) {
+  const { data: committeeData } = await admin
+    .from('profiles')
+    .select('id, full_name, group_label')
+    .eq('role', 'committee')
+    .order('full_name')
+  const committee = (committeeData ?? []) as Pick<Profile, 'id' | 'full_name' | 'group_label'>[]
+  let panitia: { full_name: string; group_label: string | null; phone: string }[] = []
+  if (committee.length) {
     const { data: privsData } = await admin
       .from('member_private')
       .select('id, phone')
-      .in('id', admins.map(a => a.id))
+      .in('id', committee.map(c => c.id))
       .not('phone', 'is', null)
-      .limit(1)
     const privs = (privsData ?? []) as Pick<MemberPrivate, 'id' | 'phone'>[]
-    if (privs.length) {
-      const a = admins.find(x => x.id === privs[0].id)
-      if (a && privs[0].phone) adminContact = { full_name: a.full_name, phone: privs[0].phone }
-    }
+    const phoneById = new Map(privs.map(p => [p.id, p.phone] as const))
+    panitia = committee
+      .filter(c => phoneById.get(c.id))
+      .map(c => ({ full_name: c.full_name, group_label: c.group_label, phone: phoneById.get(c.id)! }))
   }
 
   async function signOut() {
@@ -152,21 +155,8 @@ export default async function MePage() {
           <ChangePassword />
         </div>
 
-        {/* Contact committee */}
-        {adminContact?.phone && (
-          <a
-            href={`https://wa.me/${toWaNumber(adminContact.phone)}?text=${encodeURIComponent('Halo panitia ACES DOTA REBOOT 2026, saya mau tanya 😊')}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full border border-emerald-300 dark:border-emerald-800/60 hover:border-emerald-500 dark:hover:border-emerald-700 text-emerald-700 dark:text-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400 text-sm font-medium py-2.5 rounded-xl transition"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-              <path d="M12 0C5.373 0 0 5.373 0 12c0 2.125.555 4.122 1.528 5.858L0 24l6.336-1.508A11.933 11.933 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.797 9.797 0 01-4.988-1.362l-.358-.213-3.76.896.952-3.653-.234-.374A9.778 9.778 0 012.182 12C2.182 6.57 6.57 2.182 12 2.182S21.818 6.57 21.818 12 17.43 21.818 12 21.818z"/>
-            </svg>
-            Contact Committee
-          </a>
-        )}
+        {/* Contact panitia (committee) */}
+        <ContactPanitia contacts={panitia} />
 
         {/* Sign out */}
         <div className="pt-2 flex flex-col items-center gap-3">
