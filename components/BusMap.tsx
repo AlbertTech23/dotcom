@@ -167,7 +167,7 @@ export function BusMap({ profiles, setProfiles, busNumber, isAdmin, mySeatNumber
                     `}
                   >
                     {cell}
-                    {isMine && <span className="block text-[6px] leading-none -mt-0.5 opacity-70">me</span>}
+                    {isMine && <span className="block text-[10px] font-semibold leading-none -mt-0.5 text-amber-600 dark:text-amber-400">me</span>}
                   </button>
                 )
               })}
