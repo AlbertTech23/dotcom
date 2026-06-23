@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { StatusBadge } from '@/components/StatusBadge'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import type { Profile } from '@/types/database'
 import { Users, Pencil, Check, X, Trash2, ChevronDown, Plus, ChevronLeft } from 'lucide-react'
 
@@ -364,26 +365,11 @@ export function GroupsView({ initialProfiles, persistedGroups, isAdmin, myGroupL
                       title="Rename group"
                     ><Pencil size={13} /></button>
 
-                    {deletingGroup === groupName ? (
-                      <div className="flex items-center gap-1 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-2 py-0.5">
-                        <span className="text-xs text-red-600 dark:text-red-400">Remove group?</span>
-                        <button
-                          onClick={() => deleteGroup(groupName)}
-                          className="text-red-600 dark:text-red-400 hover:text-red-700 p-0.5"
-                          title="Confirm"
-                        ><Check size={13} /></button>
-                        <button
-                          onClick={() => setDeletingGroup(null)}
-                          className="text-slate-400 hover:text-slate-600 p-0.5"
-                        ><X size={13} /></button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setDeletingGroup(groupName)}
-                        className="text-slate-400 hover:text-red-500 transition p-1 rounded"
-                        title="Delete group (moves members to Unassigned)"
-                      ><Trash2 size={13} /></button>
-                    )}
+                    <button
+                      onClick={() => setDeletingGroup(groupName)}
+                      className="text-slate-400 hover:text-red-500 transition p-1 rounded"
+                      title="Delete group (moves members to Unassigned)"
+                    ><Trash2 size={13} /></button>
                   </>
                 )}
               </div>
@@ -430,6 +416,15 @@ export function GroupsView({ initialProfiles, persistedGroups, isAdmin, myGroupL
           </div>
         )
       })}
+
+      <ConfirmDialog
+        open={!!deletingGroup}
+        title="Delete group?"
+        message={<>Delete group <strong className="text-slate-700 dark:text-slate-200">{deletingGroup}</strong>? Its members move to Unassigned.</>}
+        confirmLabel="Delete"
+        onConfirm={() => { const g = deletingGroup; setDeletingGroup(null); if (g) deleteGroup(g) }}
+        onCancel={() => setDeletingGroup(null)}
+      />
     </div>
   )
 }

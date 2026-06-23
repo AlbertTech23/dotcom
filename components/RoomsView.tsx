@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { StatusBadge } from '@/components/StatusBadge'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import type { Profile, Room } from '@/types/database'
 import { Building2, Pencil, Trash2, X, Plus, ChevronLeft } from 'lucide-react'
 
@@ -25,6 +26,7 @@ export function RoomsView({ initialRooms, initialProfiles, isAdmin, myRoomId }: 
   const [assigningRoom, setAssigningRoom] = useState<Room | null>(null)
   const [assignMemberId, setAssignMemberId] = useState('')
   const [assigning, setAssigning] = useState(false)
+  const [roomToDelete, setRoomToDelete] = useState<Room | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -88,7 +90,6 @@ export function RoomsView({ initialRooms, initialProfiles, isAdmin, myRoomId }: 
   }
 
   async function deleteRoom(room: Room) {
-    if (!confirm(`Delete room "${room.name}"? All occupants will be unassigned.`)) return
     const res = await fetch(`/api/admin/rooms/${room.id}`, { method: 'DELETE' })
     if (res.ok) {
       setRooms(prev => prev.filter(r => r.id !== room.id))
@@ -212,7 +213,7 @@ export function RoomsView({ initialRooms, initialProfiles, isAdmin, myRoomId }: 
                   <button onClick={() => openEdit(room)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition p-0.5" title="Edit room">
                     <Pencil size={13} />
                   </button>
-                  <button onClick={() => deleteRoom(room)} className="text-slate-400 hover:text-red-500 transition p-0.5" title="Delete room">
+                  <button onClick={() => setRoomToDelete(room)} className="text-slate-400 hover:text-red-500 transition p-0.5" title="Delete room">
                     <Trash2 size={13} />
                   </button>
                 </div>
@@ -333,6 +334,15 @@ export function RoomsView({ initialRooms, initialProfiles, isAdmin, myRoomId }: 
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!roomToDelete}
+        title="Delete room?"
+        message={<>Delete room <strong className="text-slate-700 dark:text-slate-200">{roomToDelete?.name}</strong>? All occupants will be unassigned.</>}
+        confirmLabel="Delete"
+        onConfirm={() => { const r = roomToDelete; setRoomToDelete(null); if (r) deleteRoom(r) }}
+        onCancel={() => setRoomToDelete(null)}
+      />
     </div>
   )
 }
