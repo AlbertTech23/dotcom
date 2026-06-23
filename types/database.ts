@@ -50,6 +50,20 @@ export interface StatusLog {
   created_at: string
 }
 
+export type MarkerVisibility = 'public' | 'private'
+
+export interface MapMarker {
+  id: string
+  label: string
+  icon: string
+  latitude: number
+  longitude: number
+  visibility: MarkerVisibility
+  source_url: string | null
+  created_by: string | null
+  created_at: string
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -71,6 +85,11 @@ export interface Database {
         Row: Room
         Insert: Partial<Room> & { name: string }
         Update: Partial<Room>
+      }
+      map_markers: {
+        Row: MapMarker
+        Insert: Partial<MapMarker> & { label: string; latitude: number; longitude: number }
+        Update: Partial<MapMarker>
       }
     }
   }

@@ -24,3 +24,29 @@ export function toWaNumber(phone: string): string {
   if (digits.startsWith('62')) return digits
   return '62' + digits
 }
+
+/** Link that opens a coordinate in Google Maps (web or the app). */
+export function gmapsUrl(lat: number, lng: number): string {
+  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
+}
+
+/** Best-effort extraction of lat/lng from a (resolved) Google Maps URL or page.
+ *  Handles the common shapes: .../@lat,lng,zoom · ?q=lat,lng · !3dlat!4dlng */
+export function parseLatLngFromMapsUrl(url: string): { lat: number; lng: number } | null {
+  const patterns = [
+    /@(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/,
+    /[?&](?:q|query|destination|ll)=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/,
+    /!3d(-?\d{1,3}\.\d+)!4d(-?\d{1,3}\.\d+)/,
+  ]
+  for (const re of patterns) {
+    const m = url.match(re)
+    if (m) {
+      const lat = parseFloat(m[1])
+      const lng = parseFloat(m[2])
+      if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+        return { lat, lng }
+      }
+    }
+  }
+  return null
+}

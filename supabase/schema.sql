@@ -139,11 +139,34 @@ create policy "admin_delete_rooms" on public.rooms for delete using (public.is_a
 create policy "all_select_groups"  on public.groups for select using (auth.uid() is not null);
 create policy "admin_write_groups" on public.groups for all using (public.is_admin()) with check (public.is_admin());
 
+-- ── Map markers (committee/admin-placed pins) ───────────────
+create table if not exists public.map_markers (
+  id          uuid        primary key default gen_random_uuid(),
+  label       text        not null,
+  icon        text        not null default '📍',
+  latitude    float8      not null,
+  longitude   float8      not null,
+  visibility  text        not null default 'public' check (visibility in ('public', 'private')),
+  source_url  text,        -- original pasted Google Maps link, so "Open in Maps" is exact
+  created_by  uuid        references public.profiles(id) on delete set null,
+  created_at  timestamptz not null default now()
+);
+alter table public.map_markers enable row level security;
+-- public pins: any authenticated user reads. private pins: committee/admin only.
+-- writes (create/edit/delete): committee/admin only.
+create policy "markers_select" on public.map_markers for select
+  using ((visibility = 'public' and auth.uid() is not null) or public.is_admin());
+create policy "markers_insert" on public.map_markers for insert with check (public.is_admin());
+create policy "markers_update" on public.map_markers for update using (public.is_admin());
+create policy "markers_delete" on public.map_markers for delete using (public.is_admin());
+create index if not exists map_markers_visibility_idx on public.map_markers(visibility);
+
 -- ── Realtime ────────────────────────────────────────────────
 -- Run if supabase_realtime publication doesn't already include these tables:
 alter publication supabase_realtime add table public.profiles;
 alter publication supabase_realtime add table public.rooms;
 alter publication supabase_realtime add table public.groups;
+alter publication supabase_realtime add table public.map_markers;
 
 -- ── Indexes ─────────────────────────────────────────────────
 -- qr_token is indexed by its UNIQUE constraint on member_private (no extra index needed)

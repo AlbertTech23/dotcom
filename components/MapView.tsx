@@ -2,7 +2,7 @@
 import dynamic from 'next/dynamic'
 import { MapPin, ChevronLeft } from 'lucide-react'
 import { NavLocationToggle } from '@/components/NavLocationToggle'
-import type { Profile } from '@/types/database'
+import type { Profile, MapMarker } from '@/types/database'
 
 const LiveMap = dynamic(() => import('@/components/LiveMap'), {
   ssr: false,
@@ -18,11 +18,12 @@ const LiveMap = dynamic(() => import('@/components/LiveMap'), {
 
 interface Props {
   initialProfiles: Profile[]
+  initialMarkers: MapMarker[]
   isPrivileged: boolean
   initialSharing: boolean
 }
 
-export function MapView({ initialProfiles, isPrivileged, initialSharing }: Props) {
+export function MapView({ initialProfiles, initialMarkers, isPrivileged, initialSharing }: Props) {
   const sharingCount = initialProfiles.filter(p => p.location_sharing).length
 
   return (
@@ -34,7 +35,7 @@ export function MapView({ initialProfiles, isPrivileged, initialSharing }: Props
 
       {/* ── Map fills the entire container ── */}
       <div className="absolute inset-0">
-        <LiveMap initialProfiles={initialProfiles} />
+        <LiveMap initialProfiles={initialProfiles} initialMarkers={initialMarkers} isPrivileged={isPrivileged} />
       </div>
 
       {/* ── Floating header ── */}
