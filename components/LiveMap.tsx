@@ -47,6 +47,11 @@ function formatDistance(meters: number) {
   return meters < 1000 ? `${Math.round(meters)} m` : `${(meters / 1000).toFixed(2)} km`
 }
 
+function formatDuration(seconds: number) {
+  const m = Math.round(seconds / 60)
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h ${m % 60}m`
+}
+
 // Forces Leaflet to re-read container dimensions after React finishes layout.
 function InvalidateOnMount() {
   const map = useMap()
@@ -78,6 +83,9 @@ export default function LiveMap({ initialProfiles, initialMarkers, isPrivileged 
   const [markers, setMarkers] = useState(initialMarkers)
   const [mode, setMode] = useState<Mode>('idle')
   const [rulerPts, setRulerPts] = useState<{ lat: number; lng: number }[]>([])
+  const [routeLine, setRouteLine] = useState<[number, number][] | null>(null)
+  const [routeInfo, setRouteInfo] = useState<{ distance: number; duration: number } | null>(null)
+  const [routing, setRouting] = useState(false)
   const [form, setForm] = useState<
     | { kind: 'create'; latLng: { lat: number; lng: number } | null }
     | { kind: 'edit'; marker: MapMarker }
@@ -140,7 +148,35 @@ export default function LiveMap({ initialProfiles, initialMarkers, isPrivileged 
   }, [isPrivileged])
 
   function addRulerPoint(lat: number, lng: number) {
+    setRouteLine(null)
+    setRouteInfo(null)
     setRulerPts(prev => (prev.length >= 2 ? [{ lat, lng }] : [...prev, { lat, lng }]))
+  }
+
+  function clearRuler() {
+    setRulerPts([])
+    setRouteLine(null)
+    setRouteInfo(null)
+  }
+
+  async function routeByRoad() {
+    if (rulerPts.length !== 2) return
+    setRouting(true)
+    try {
+      const res = await fetch('/api/route', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ start: rulerPts[0], end: rulerPts[1] }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Routing failed')
+      setRouteLine(data.geometry)
+      setRouteInfo({ distance: data.distance, duration: data.duration })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Routing failed')
+    } finally {
+      setRouting(false)
+    }
   }
 
   function handleMapClick(lat: number, lng: number) {
@@ -282,6 +318,9 @@ export default function LiveMap({ initialProfiles, initialMarkers, isPrivileged 
         {rulerPts.length === 2 && (
           <Polyline positions={rulerPts.map(p => [p.lat, p.lng])} pathOptions={{ color: '#2563eb', weight: 3, dashArray: '6 6' }} />
         )}
+        {routeLine && (
+          <Polyline positions={routeLine} pathOptions={{ color: '#1d4ed8', weight: 5, opacity: 0.85 }} />
+        )}
       </MapContainer>
 
       {/* ── Toolbar (left, below the floating header) ── */}
@@ -352,14 +391,24 @@ export default function LiveMap({ initialProfiles, initialMarkers, isPrivileged 
         </div>
       )}
       {mode === 'ruler' && (
-        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-[600] flex items-center gap-3 bg-slate-900/85 backdrop-blur-sm text-white text-xs rounded-full pl-4 pr-2 py-2 shadow-lg whitespace-nowrap">
-          {rulerDist != null ? (
-            <span className="font-semibold">{formatDistance(rulerDist)} <span className="font-normal text-white/60">straight line</span></span>
-          ) : (
-            <span>Tap two points to measure</span>
+        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-[600] flex flex-col items-center gap-1.5">
+          <div className="flex items-center gap-2.5 bg-slate-900/85 backdrop-blur-sm text-white text-xs rounded-full pl-4 pr-2 py-2 shadow-lg whitespace-nowrap">
+            {routeInfo ? (
+              <span className="font-semibold">{formatDistance(routeInfo.distance)} · ~{formatDuration(routeInfo.duration)} <span className="font-normal text-white/60">by road</span></span>
+            ) : rulerDist != null ? (
+              <span className="font-semibold">{formatDistance(rulerDist)} <span className="font-normal text-white/60">straight line</span></span>
+            ) : (
+              <span>Tap two points or pins to measure</span>
+            )}
+            {rulerPts.length === 2 && !routeInfo && (
+              <button onClick={routeByRoad} disabled={routing} className="font-semibold bg-blue-600 hover:bg-blue-500 disabled:opacity-60 rounded-full px-2.5 py-1 transition">{routing ? '…' : 'Route by road'}</button>
+            )}
+            {rulerPts.length > 0 && <button onClick={clearRuler} className="font-semibold bg-white/15 hover:bg-white/25 rounded-full px-2.5 py-1 transition">Clear</button>}
+            <button onClick={() => { setMode('idle'); clearRuler() }} aria-label="Done" className="text-white/70 hover:text-white p-1"><X size={14} /></button>
+          </div>
+          {routeInfo && (
+            <span className="text-[10px] text-white/80 bg-slate-900/70 backdrop-blur-sm rounded-full px-2.5 py-0.5">Estimasi tanpa data lalu lintas — asumsi jalan lancar</span>
           )}
-          {rulerPts.length > 0 && <button onClick={() => setRulerPts([])} className="font-semibold bg-white/15 hover:bg-white/25 rounded-full px-2.5 py-1 transition">Clear</button>}
-          <button onClick={() => { setMode('idle'); setRulerPts([]) }} aria-label="Done" className="text-white/70 hover:text-white p-1"><X size={14} /></button>
         </div>
       )}
 
