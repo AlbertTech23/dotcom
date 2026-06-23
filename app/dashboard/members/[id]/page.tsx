@@ -111,7 +111,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
         </div>
         {priv?.phone && (
           <a
-            href={`https://wa.me/${toWaNumber(priv.phone)}?text=${encodeURIComponent(`Halo ${profile.full_name}, ini dari panitia ACES DOTA REBOOT 2026 😊`)}`}
+            href={`https://wa.me/${toWaNumber(priv.phone)}?text=${encodeURIComponent(`Halo ${profile.full_name}, ini dari panitia ACES DOTA REBOOT 2026 \u{1F60A}`)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition"

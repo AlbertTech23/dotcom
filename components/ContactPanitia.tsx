@@ -57,7 +57,7 @@ export function ContactPanitia({ contacts }: { contacts: PanitiaContact[] }) {
 
   function waHref(c: PanitiaContact) {
     const firstName = c.full_name.split(/\s+/)[0]
-    const text = `Halo Kak ${firstName}, saya peserta ACES DOTA REBOOT 2026 mau bertanya 😊`
+    const text = `Halo Kak ${firstName}, saya peserta ACES DOTA REBOOT 2026 mau bertanya \u{1F60A}`
     return `https://wa.me/${toWaNumber(c.phone)}?text=${encodeURIComponent(text)}`
   }
 
