@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireAdmin } from '@/lib/supabase/require-admin'
+import { requireAdmin, requireSuperAdmin } from '@/lib/supabase/require-admin'
 import { isDuplicateEmail } from '@/lib/supabase/auth-errors'
+
+// Bulk import creates member/committee accounts only — never admins.
+const VALID_ROLES = ['committee', 'member']
 
 interface MemberRow {
   email: string
@@ -11,6 +14,7 @@ interface MemberRow {
   student_id?: string
   phone?: string
   group_label?: string
+  role?: string
 }
 
 export async function POST(req: NextRequest) {
@@ -23,6 +27,14 @@ export async function POST(req: NextRequest) {
 
   if (!Array.isArray(members) || members.length === 0) {
     return NextResponse.json({ error: 'members array is required and must not be empty' }, { status: 400 })
+  }
+
+  // Assigning an elevated role (committee) is admin-only — committee can import
+  // members but not escalate. Mirrors the single-member create endpoint.
+  const wantsElevatedRole = members.some(m => VALID_ROLES.includes(m.role ?? '') && m.role !== 'member')
+  if (wantsElevatedRole) {
+    const notSuper = await requireSuperAdmin(supabase)
+    if (notSuper) return notSuper
   }
 
   const admin = createAdminClient()
@@ -53,7 +65,7 @@ export async function POST(req: NextRequest) {
       const { error: profileError } = await supabase.from('profiles').upsert({
         id:          authData.user.id,
         full_name:   m.full_name,
-        role:        'member',
+        role:        VALID_ROLES.includes(m.role ?? '') ? m.role : 'member',
         group_label: m.group_label ?? null,
       })
 

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { MemberForm } from '@/components/MemberForm'
 import type { Profile, Room } from '@/types/database'
-import { ChevronLeft, UserPlus } from 'lucide-react'
+import { ChevronLeft, UserPlus, FileSpreadsheet } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,10 +31,14 @@ export default async function NewMemberPage() {
         </Link>
         <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
         <UserPlus size={20} className="text-blue-500 flex-shrink-0" />
-        <div>
+        <div className="flex-1">
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Add Member</h1>
           <p className="text-slate-500 text-xs mt-0.5">Create a new member account</p>
         </div>
+        <Link href="/dashboard/members/import" title="Import from Excel"
+          className="flex items-center gap-1.5 border border-slate-300 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-400 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg transition flex-shrink-0">
+          <FileSpreadsheet size={15} /><span className="hidden sm:inline">Import Excel</span>
+        </Link>
       </div>
 
       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
