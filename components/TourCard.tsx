@@ -20,9 +20,28 @@ export function TourCard({
   // viewport. So a target near a screen edge — the map header at top-left, or the
   // export button — pushes the card off-screen. After the card settles, measure it
   // and nudge it back inside the viewport.
+  //
+  // Worse: Onborda derives the card position from the target's *document-flow*
+  // coordinates. For a target inside a `position: sticky` bar (the dashboard top
+  // bar / desktop header) or a `position: fixed` bar (the mobile bottom nav), the
+  // visual position diverges from the flow position once the page is scrolled —
+  // stranding the card mid-screen while the highlight stays pinned to the bar. For
+  // those pinned targets we re-anchor the card to the element's *visual* rect.
   useEffect(() => {
     const el = cardRef.current
     if (!el) return
+
+    // Walk up from the target — stickiness/fixedness usually lives on an ancestor
+    // bar, not the highlighted link itself.
+    const isPinned = (node: Element | null) => {
+      let n: Element | null = node
+      while (n && n !== document.body) {
+        const p = getComputedStyle(n).position
+        if (p === 'fixed' || p === 'sticky') return true
+        n = n.parentElement
+      }
+      return false
+    }
 
     const clamp = () => {
       el.style.transform = 'translate(0px, 0px)'
@@ -30,10 +49,31 @@ export function TourCard({
       const m = 8 // min gap from the viewport edge
       let dx = 0
       let dy = 0
-      if (rect.left < m) dx = m - rect.left
-      else if (rect.right > window.innerWidth - m) dx = window.innerWidth - m - rect.right
-      if (rect.top < m) dy = m - rect.top
-      else if (rect.bottom > window.innerHeight - m) dy = window.innerHeight - m - rect.bottom
+
+      // Re-anchor to a pinned target's visual rect before clamping.
+      const target = step?.selector ? document.querySelector(step.selector) : null
+      if (target && isPinned(target)) {
+        const t = target.getBoundingClientRect()
+        const gap = 12
+        dx = (t.left + t.width / 2 - rect.width / 2) - rect.left // centre on target
+        const above = (t.top - gap - rect.height) - rect.top
+        const below = (t.bottom + gap) - rect.top
+        // Honour the requested side, but flip if there isn't room (e.g. the desktop
+        // header puts a `side: 'top'` target flush against the viewport top).
+        if (step?.side === 'top') dy = rect.top + above < m ? below : above
+        else dy = rect.bottom + below > window.innerHeight - m ? above : below
+      }
+
+      // Clamp the re-anchored box back inside the viewport.
+      const left = rect.left + dx
+      const right = rect.right + dx
+      const top = rect.top + dy
+      const bottom = rect.bottom + dy
+      if (left < m) dx += m - left
+      else if (right > window.innerWidth - m) dx += window.innerWidth - m - right
+      if (top < m) dy += m - top
+      else if (bottom > window.innerHeight - m) dy += window.innerHeight - m - bottom
+
       if (dx || dy) el.style.transform = `translate(${dx}px, ${dy}px)`
     }
 
