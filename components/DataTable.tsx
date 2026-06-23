@@ -307,7 +307,7 @@ export function DataTable({
 
   // Status chips are colour-coded so the distinction is obvious at a glance.
   const statusBtnClass = (value: string, active: boolean) => {
-    const base = 'text-xs px-2.5 py-1.5 rounded-lg font-semibold transition border'
+    const base = 'text-sm px-3 py-2 rounded-lg font-semibold transition border'
     if (!active) return `${base} border-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700`
     if (value === 'on_bus')  return `${base} bg-emerald-500 border-emerald-500 text-white`
     if (value === 'off_bus') return `${base} bg-red-500 border-red-500 text-white`
@@ -331,10 +331,12 @@ export function DataTable({
             />
           </div>
 
-          {/* Status — the most-used filter, kept inline beside the search */}
-          <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1 flex-shrink-0">
+          {/* Status — the most-used filter. Inline beside the search on desktop;
+              on mobile it drops to its own full-width row of equal-width tabs
+              (order-last + w-full forces the flex-wrap break). */}
+          <div className="order-last w-full sm:order-none sm:w-auto flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1 flex-shrink-0">
             {(['all', 'on_bus', 'off_bus'] as const).map(s => (
-              <button key={s} onClick={() => setStatusFilter(s)} className={statusBtnClass(s, statusFilter === s)}>
+              <button key={s} onClick={() => setStatusFilter(s)} className={`flex-1 sm:flex-none ${statusBtnClass(s, statusFilter === s)}`}>
                 {s === 'all' ? 'All' : s === 'on_bus' ? 'On Bus' : 'Off Bus'}
               </button>
             ))}
