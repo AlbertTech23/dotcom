@@ -8,7 +8,7 @@ import { RoleSelector } from '@/components/RoleSelector'
 import { DeleteMemberButton } from '@/components/DeleteMemberButton'
 import { formatTime, toWaNumber } from '@/lib/utils'
 import type { Profile, MemberPrivate, Room } from '@/types/database'
-import { ChevronLeft, CheckCircle2, LogOut as LogOutIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CheckCircle2, LogOut as LogOutIcon, Armchair } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,6 +71,25 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
         <h1 className="text-xl font-bold text-slate-900 dark:text-white">{profile.full_name}</h1>
         <StatusBadge status={profile.status} />
       </div>
+
+      {/* Jump straight to this member's seat on the bus map (no manual hunting).
+          Seated → spotlight their seat; unseated → hand them to the map to place. */}
+      <Link
+        href={profile.seat_number && profile.bus_number
+          ? `/buses?bus=${profile.bus_number}&seat=${profile.seat_number}`
+          : `/buses?place=${id}${profile.bus_number ? `&bus=${profile.bus_number}` : ''}`}
+        className="group flex items-center justify-between gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-600 rounded-2xl px-4 py-3 transition"
+      >
+        <span className="flex items-center gap-2.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+          <span className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0">
+            <Armchair size={16} />
+          </span>
+          {profile.seat_number && profile.bus_number
+            ? `View seat — Bus ${profile.bus_number}, seat ${profile.seat_number}`
+            : 'Assign a seat on the bus'}
+        </span>
+        <ChevronRight size={16} className="text-slate-400 group-hover:text-blue-500 transition flex-shrink-0" />
+      </Link>
 
       {/* Edit form */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">

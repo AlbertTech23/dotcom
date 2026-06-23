@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   if (denied) return denied
 
   const body = await req.json()
-  const { email, password, full_name, student_id, phone, group_label, room_id, bus_number, role } = body
+  const { email, password, full_name, student_id, phone, group_label, room_id, role } = body
 
   if (!email || !password || !full_name) {
     return NextResponse.json({ error: 'email, password, and full_name are required' }, { status: 400 })
@@ -55,7 +55,6 @@ export async function POST(req: NextRequest) {
     role:        newRole,
     group_label: group_label ?? null,
     room_id:     room_id ?? null,
-    bus_number:  bus_number ?? null,
   })
 
   if (profileError) {

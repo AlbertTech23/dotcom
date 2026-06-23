@@ -24,6 +24,13 @@ interface Props {
   busNumber: 1 | 2
   isAdmin: boolean
   mySeatNumber?: number | null
+  /** A member "held" for placement (from the unassigned tray or member-add flow).
+   *  While set, tapping an empty seat assigns them instead of opening the modal. */
+  heldMemberId?: string | null
+  setHeldMemberId?: Dispatch<SetStateAction<string | null>>
+  /** Seat to spotlight when arriving via a deep-link (e.g. from a member's detail
+   *  page). Gets id="focus-seat" so the parent can scroll it into view. */
+  focusSeat?: number | null
 }
 
 type SeatStatus = 'empty' | 'on_bus' | 'off_bus'
@@ -44,7 +51,7 @@ const seatColor: Record<SeatStatus, string> = {
   off_bus:'bg-red-100 dark:bg-red-900/50 border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/70',
 }
 
-export function BusMap({ profiles, setProfiles, busNumber, isAdmin, mySeatNumber }: Props) {
+export function BusMap({ profiles, setProfiles, busNumber, isAdmin, mySeatNumber, heldMemberId = null, setHeldMemberId, focusSeat = null }: Props) {
   const [selected, setSelected]           = useState<number | null>(null)
   const [assigning, setAssigning]         = useState(false)
   const [assignMemberId, setAssignMemberId] = useState('')
@@ -61,9 +68,9 @@ export function BusMap({ profiles, setProfiles, busNumber, isAdmin, mySeatNumber
     setLoading(false)
     if (!res.ok) { toast.error(data.error ?? 'Failed to assign seat'); return }
     // Mutate locally so the map updates instantly (no realtime dependency): assign
-    // the member, and bump whoever was in that seat.
+    // the member (reset to off_bus, mirroring the API), and bump whoever was there.
     setProfiles(prev => prev.map(p => {
-      if (p.id === assignMemberId) return { ...p, bus_number: busNumber, seat_number: seat }
+      if (p.id === assignMemberId) return { ...p, bus_number: busNumber, seat_number: seat, status: 'off_bus', last_changed_at: new Date().toISOString() }
       if (p.bus_number === busNumber && p.seat_number === seat) return { ...p, bus_number: null, seat_number: null }
       return p
     }))
@@ -83,6 +90,30 @@ export function BusMap({ profiles, setProfiles, busNumber, isAdmin, mySeatNumber
     setProfiles(prev => prev.map(p => p.id === memberId ? { ...p, bus_number: null, seat_number: null } : p))
     toast.success('Seat cleared')
     setSelected(null)
+  }
+
+  // Place the currently "held" member (from the tray / member-add flow) onto a seat.
+  async function placeHeld(seat: number) {
+    if (!heldMemberId) return
+    setLoading(true)
+    const res = await fetch('/api/admin/seats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memberId: heldMemberId, busNumber, seatNumber: seat }) })
+    const data = await res.json()
+    setLoading(false)
+    if (!res.ok) { toast.error(data.error ?? 'Failed to assign seat'); return }
+    setProfiles(prev => prev.map(p => p.id === heldMemberId ? { ...p, bus_number: busNumber, seat_number: seat, status: 'off_bus', last_changed_at: new Date().toISOString() } : p))
+    toast.success(`Assigned to seat ${seat}`)
+    setHeldMemberId?.(null)
+  }
+
+  function handleSeatClick(seat: number) {
+    // Holding someone → empty seat places them; occupied seat is rejected.
+    if (heldMemberId) {
+      if (getSeatProfile(seat, profiles, busNumber)) { toast.error('Seat taken — pick an empty one'); return }
+      placeHeld(seat)
+      return
+    }
+    setSelected(prev => (prev === seat ? null : seat))
+    setAssigning(false)
   }
 
   // Anyone without a seat is assignable to this bus — regardless of which bus
@@ -122,14 +153,17 @@ export function BusMap({ profiles, setProfiles, busNumber, isAdmin, mySeatNumber
                 const status = getSeatStatus(cell, profiles, busNumber)
                 const isSelected = selected === cell
                 const isMine = mySeatNumber === cell
+                const isFocus = focusSeat === cell
                 return (
                   <button key={ci}
-                    id={isMine ? 'my-seat' : undefined}
-                    onClick={() => { setSelected(isSelected ? null : cell); setAssigning(false) }}
+                    id={isFocus ? 'focus-seat' : isMine ? 'my-seat' : undefined}
+                    onClick={() => handleSeatClick(cell)}
                     className={`aspect-square rounded-lg border text-xs font-bold transition-all
                       ${seatColor[status]}
                       ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-white dark:ring-offset-slate-900 scale-110' : ''}
-                      ${isMine && !isSelected ? 'ring-2 ring-amber-400 dark:ring-amber-500 ring-offset-1 ring-offset-white dark:ring-offset-slate-900' : ''}
+                      ${isFocus && !isSelected ? 'ring-2 ring-indigo-500 dark:ring-indigo-400 ring-offset-1 ring-offset-white dark:ring-offset-slate-900 scale-110' : ''}
+                      ${isMine && !isSelected && !isFocus ? 'ring-2 ring-amber-400 dark:ring-amber-500 ring-offset-1 ring-offset-white dark:ring-offset-slate-900' : ''}
+                      ${heldMemberId && status === 'empty' ? 'ring-2 ring-blue-400/70 animate-pulse' : ''}
                     `}
                   >
                     {cell}

@@ -26,7 +26,6 @@ export function MemberForm({ mode, profile, rooms, groups, canAssignRole = false
     phone:       profile?.phone       ?? '',
     group_label: profile?.group_label ?? '',
     room_id:     profile?.room_id     ?? '',
-    bus_number:  profile?.bus_number ? String(profile.bus_number) : '',
     role:        profile?.role        ?? 'member',
   })
   const [roomList, setRoomList]   = useState<Room[]>(rooms)
@@ -38,6 +37,9 @@ export function MemberForm({ mode, profile, rooms, groups, canAssignRole = false
   const [creatingRoom, setCreatingRoom] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  // Create-only: routing helper, NOT stored. '' = seat later (TBD); '1'/'2' =
+  // jump to that bus's layout to pick a seat right after saving.
+  const [seatBus, setSeatBus] = useState<'' | '1' | '2'>('')
 
   function update(field: string, value: string) {
     setForm(f => ({ ...f, [field]: value }))
@@ -90,7 +92,6 @@ export function MemberForm({ mode, profile, rooms, groups, canAssignRole = false
       phone:       form.phone,
       group_label: form.group_label.trim() || null,
       room_id:     form.room_id || null,
-      bus_number:  form.bus_number ? Number(form.bus_number) : null,
     }
 
     try {
@@ -109,6 +110,13 @@ export function MemberForm({ mode, profile, rooms, groups, canAssignRole = false
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data.error)
+        // If a bus was picked, go straight to its layout to seat the new member.
+        if (seatBus && data.id) {
+          toast.success('Member added — now pick a seat')
+          router.push(`/buses?bus=${seatBus}&place=${data.id}`)
+          router.refresh()
+          return
+        }
       } else {
         const res = await fetch(`/api/admin/members/${profile!.id}`, {
           method: 'PATCH',
@@ -194,8 +202,9 @@ export function MemberForm({ mode, profile, rooms, groups, canAssignRole = false
         </div>
       </div>
 
-      {/* Group + Bus */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Group + (create only) where to seat them. Bus here is just routing — the
+          actual bus+seat are written together on the Bus page so they never drift. */}
+      <div className={mode === 'create' ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : ''}>
         <div>
           <label className={labelClass}>Group</label>
           <select
@@ -211,14 +220,17 @@ export function MemberForm({ mode, profile, rooms, groups, canAssignRole = false
             <option value={NEW}>+ Add new group</option>
           </select>
         </div>
-        <div>
-          <label className={labelClass}>Bus</label>
-          <select className={`${inputClass} app-select`} value={form.bus_number} onChange={e => update('bus_number', e.target.value)}>
-            <option value="">No bus</option>
-            <option value="1">Bus A</option>
-            <option value="2">Bus B</option>
-          </select>
-        </div>
+        {mode === 'create' && (
+          <div>
+            <label className={labelClass}>Bus seat</label>
+            <select className={`${inputClass} app-select`} value={seatBus} onChange={e => setSeatBus(e.target.value as '' | '1' | '2')}>
+              <option value="">Assign seat later (TBD)</option>
+              <option value="1">Bus 1 — pick seat next</option>
+              <option value="2">Bus 2 — pick seat next</option>
+            </select>
+            <p className="text-xs text-slate-400 mt-1">Choose a bus to pick a seat right after saving.</p>
+          </div>
+        )}
       </div>
 
       {/* New-group input (full width, matches the room create row) */}

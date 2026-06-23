@@ -18,7 +18,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.full_name   !== undefined) profileUpdate.full_name   = body.full_name
   if (body.group_label !== undefined) profileUpdate.group_label = body.group_label
   if (body.room_id     !== undefined) profileUpdate.room_id     = body.room_id ?? null
-  if (body.bus_number  !== undefined) profileUpdate.bus_number  = body.bus_number ?? null
+  // bus_number is intentionally NOT writable here — bus + seat are set together on
+  // the Bus page so they never drift apart.
 
   if (Object.keys(profileUpdate).length > 0) {
     const { error } = await supabase.from('profiles').update(profileUpdate).eq('id', id)

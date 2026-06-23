@@ -22,10 +22,12 @@ export async function POST(req: NextRequest) {
     .eq('seat_number', seatNumber)
     .neq('id', memberId)
 
-  // Assign the member
+  // Assign the member. A freshly-seated member hasn't boarded yet, so always
+  // reset them to off_bus — boarding checks then start from a clean slate (the
+  // committee flips them on when they scan in).
   const { error } = await supabase
     .from('profiles')
-    .update({ bus_number: busNumber, seat_number: seatNumber })
+    .update({ bus_number: busNumber, seat_number: seatNumber, status: 'off_bus', last_changed_at: new Date().toISOString() })
     .eq('id', memberId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
