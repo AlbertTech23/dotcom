@@ -85,8 +85,12 @@ export function BusMap({ profiles, setProfiles, busNumber, isAdmin, mySeatNumber
     setSelected(null)
   }
 
+  // Anyone without a seat is assignable to this bus — regardless of which bus
+  // they were nominally pencilled into. Gating on bus_number used to hide members
+  // pre-assigned to the *other* bus but never seated, making them unassignable
+  // here (they also don't show under "Move from another seat" — no seat to move).
   const allUnassigned = profiles.filter(p =>
-    p.role !== 'admin' && (p.bus_number === null || p.bus_number === busNumber) && p.seat_number === null
+    p.role !== 'admin' && p.seat_number === null
   )
   // Already-seated participants — offered so an admin can MOVE someone into the
   // selected seat (the seats API vacates their previous seat automatically).
