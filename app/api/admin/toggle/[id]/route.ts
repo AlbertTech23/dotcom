@@ -13,11 +13,20 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const { data: profile, error } = await supabase
     .from('profiles')
-    .select('status, full_name')
+    .select('status, full_name, seat_number')
     .eq('id', id)
     .single()
 
   if (error || !profile) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+
+  // Can't board a bus they have no seat on — require a seat first, otherwise the
+  // roster accrues "on/off bus" rows for people with no seat (data debt).
+  if (profile.seat_number == null) {
+    return NextResponse.json(
+      { error: `${profile.full_name} has no seat yet. Assign a seat first.` },
+      { status: 409 },
+    )
+  }
 
   const newStatus = profile.status === 'on_bus' ? 'off_bus' : 'on_bus'
   const action    = newStatus === 'off_bus' ? 'out' : 'in'

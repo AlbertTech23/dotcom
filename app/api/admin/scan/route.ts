@@ -28,13 +28,21 @@ export async function POST(req: NextRequest) {
 
   const { data: memberData, error } = await supabase
     .from('profiles')
-    .select('id, full_name, status, role')
+    .select('id, full_name, status, role, seat_number')
     .eq('id', priv.id)
     .single()
 
-  const member = memberData as Pick<Profile, 'id' | 'full_name' | 'status' | 'role'> | null
+  const member = memberData as Pick<Profile, 'id' | 'full_name' | 'status' | 'role' | 'seat_number'> | null
   if (error || !member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
   if (member.role === 'admin') return NextResponse.json({ error: 'Cannot scan admin QR' }, { status: 400 })
+  // Require a seat before marking on/off (avoids status rows for members with no
+  // seat — see the manual toggle route for the same gate).
+  if (member.seat_number == null) {
+    return NextResponse.json(
+      { error: `${member.full_name} has no seat yet. Assign a seat first.` },
+      { status: 409 },
+    )
+  }
 
   const newStatus = member.status === 'on_bus' ? 'off_bus' : 'on_bus'
   const action    = newStatus === 'off_bus' ? 'out' : 'in'

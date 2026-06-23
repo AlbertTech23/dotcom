@@ -15,6 +15,7 @@ import {
   type Column,
   type Row,
 } from '@tanstack/react-table'
+import { toast } from 'sonner'
 import { StatusBadge } from './StatusBadge'
 import { formatTime } from '@/lib/utils'
 import type { Profile } from '@/types/database'
@@ -142,10 +143,12 @@ export function DataTable({
   async function toggle(id: string) {
     setToggling(id)
     const res = await fetch(`/api/admin/toggle/${id}`, { method: 'POST' })
+    const data = await res.json().catch(() => ({}))
     if (res.ok) {
-      const data = await res.json() as { status: 'on_bus' | 'off_bus' }
       setProfiles(prev => prev.map(p =>
-        p.id === id ? { ...p, status: data.status, last_changed_at: new Date().toISOString() } : p))
+        p.id === id ? { ...p, status: (data as { status: 'on_bus' | 'off_bus' }).status, last_changed_at: new Date().toISOString() } : p))
+    } else {
+      toast.error((data as { error?: string }).error ?? 'Could not update status')
     }
     setToggling(null)
   }
@@ -244,6 +247,18 @@ export function DataTable({
       cell: ({ row }) => {
         const p = row.original
         const onBus = p.status === 'on_bus'
+        // No seat → can't toggle. Show a muted switch that explains itself.
+        if (p.seat_number == null) {
+          return (
+            <button
+              onClick={(e) => { e.stopPropagation(); toast.error(`Assign ${p.full_name} a seat first`) }}
+              title="No seat yet — assign a seat before marking on/off"
+              className="relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full bg-slate-200 dark:bg-slate-600 opacity-70 cursor-not-allowed"
+            >
+              <span className="inline-block h-5 w-5 translate-x-0.5 transform rounded-full bg-white/80 shadow" />
+            </button>
+          )
+        }
         return (
           <button
             onClick={(e) => { e.stopPropagation(); toggle(p.id) }}
