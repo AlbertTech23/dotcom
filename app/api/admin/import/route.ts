@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/supabase/require-admin'
+import { isDuplicateEmail } from '@/lib/supabase/auth-errors'
 
 interface MemberRow {
   email: string
@@ -41,7 +42,10 @@ export async function POST(req: NextRequest) {
       })
 
       if (authError || !authData.user) {
-        results.push({ email: m.email, success: false, error: authError?.message ?? 'Auth error' })
+        const error = isDuplicateEmail(authError)
+          ? 'Already registered'
+          : authError?.message ?? 'Auth error'
+        results.push({ email: m.email, success: false, error })
         continue
       }
 

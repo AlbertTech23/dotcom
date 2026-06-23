@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin, requireSuperAdmin } from '@/lib/supabase/require-admin'
+import { isDuplicateEmail } from '@/lib/supabase/auth-errors'
 
 // Admin accounts are NOT created via this endpoint — only member/committee.
 const VALID_ROLES = ['committee', 'member']
@@ -35,6 +36,14 @@ export async function POST(req: NextRequest) {
   })
 
   if (authError || !authData.user) {
+    // Supabase enforces email uniqueness in auth.users — turn its raw error into
+    // a friendly, role-aware message (and a 409, since it's a conflict not a 500).
+    if (isDuplicateEmail(authError)) {
+      return NextResponse.json(
+        { error: `${email} is already registered to a member.` },
+        { status: 409 },
+      )
+    }
     return NextResponse.json({ error: authError?.message ?? 'Failed to create user' }, { status: 500 })
   }
 
