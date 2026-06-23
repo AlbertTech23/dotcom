@@ -10,7 +10,12 @@ export async function GET(request: Request) {
 
   if (code) {
     const supabase = await createClient()
-    await supabase.auth.exchangeCodeForSession(code)
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    // Don't silently redirect on a failed exchange — that produced the misleading
+    // "invalid or expired" dead-end. Send the user back to login with a flag.
+    if (error) {
+      return NextResponse.redirect(`${origin}/login?error=auth_callback`)
+    }
   }
   return NextResponse.redirect(`${origin}${next}`)
 }

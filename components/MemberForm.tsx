@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check } from 'lucide-react'
+import { Check, Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Profile, Room } from '@/types/database'
 
@@ -36,6 +36,7 @@ export function MemberForm({ mode, profile, rooms, groups, canAssignRole = false
   const [newGroupName, setNewGroupName] = useState('')
   const [newRoomName, setNewRoomName]   = useState('')
   const [creatingRoom, setCreatingRoom] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
   function update(field: string, value: string) {
@@ -161,8 +162,14 @@ export function MemberForm({ mode, profile, rooms, groups, canAssignRole = false
                 <p className="text-xs text-slate-400 mt-1">Members sign in with their <strong>NIM</strong> as the initial password — they can change it later from their profile.</p>
               </>
             ) : (
-              <input type="password" required className={inputClass} minLength={8}
-                value={form.password} onChange={e => update('password', e.target.value)} placeholder="min 8 chars" />
+              <div className="relative">
+                <input type={showPassword ? 'text' : 'password'} required className={`${inputClass} pr-10`} minLength={8}
+                  value={form.password} onChange={e => update('password', e.target.value)} placeholder="min 8 chars" />
+                <button type="button" onClick={() => setShowPassword(v => !v)} aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition">
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             )}
           </div>
         </>
