@@ -96,6 +96,13 @@ html.dark body::after {
 /* Compact table rows */
 table { border-collapse: collapse; }
 
+/* Leaflet zoom control: bottom-right, lifted clear of the mobile bottom nav.
+   On desktop (no bottom nav) it sits near the bottom edge. */
+.leaflet-bottom.leaflet-right { margin-bottom: 92px; margin-right: 6px; }
+@media (min-width: 768px) {
+  .leaflet-bottom.leaflet-right { margin-bottom: 20px; }
+}
+
 /* Native <select> with a consistent custom chevron. The default OS arrow renders
    in a wide right-side button that looks detached from our rounded inputs, so we
    hide it and draw our own chevron with controlled right padding/position. */

@@ -26,9 +26,11 @@ export function MapView({ initialProfiles, isPrivileged, initialSharing }: Props
   const sharingCount = initialProfiles.filter(p => p.location_sharing).length
 
   return (
-    // Map fills the full viewport; all UI floats over it as absolute overlays.
-    // This matches how Leaflet expects to be used and avoids flex/height bugs.
-    <div className="relative w-full h-screen overflow-hidden">
+    // Map fills the available canvas; all UI floats over it as absolute overlays.
+    // Height = viewport minus the desktop top-nav (h-14 + 1px border) so the page
+    // never scrolls; on mobile there's no in-flow nav, so it's the full dynamic vh.
+    // dvh accounts for the mobile browser chrome (address bar) collapsing.
+    <div className="relative w-full h-[100dvh] md:h-[calc(100dvh-3.5rem-1px)] overflow-hidden">
 
       {/* ── Map fills the entire container ── */}
       <div className="absolute inset-0">

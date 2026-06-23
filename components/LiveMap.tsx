@@ -1,9 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap, ZoomControl } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { useTheme } from 'next-themes'
 import { createClient } from '@/lib/supabase/client'
 import type { Profile } from '@/types/database'
 import { formatTime } from '@/lib/utils'
@@ -61,8 +60,6 @@ interface Props {
 
 export default function LiveMap({ initialProfiles }: Props) {
   const [profiles, setProfiles] = useState(initialProfiles)
-  const { resolvedTheme } = useTheme()
-  const isDark = resolvedTheme === 'dark'
 
   // Realtime subscription — update pins live
   useEffect(() => {
@@ -98,21 +95,22 @@ export default function LiveMap({ initialProfiles }: Props) {
       ]
     : DEFAULT_CENTER
 
-  const tileUrl = isDark
-    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-
-  const tileAttribution = isDark
-    ? '&copy; <a href="https://carto.com/">CARTO</a>'
-    : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  // Always a clean light streets basemap (CARTO Voyager) — easier to read than the
+  // dark tiles, in both light and dark app themes. Free, supports retina + subdomains.
+  const tileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+  const tileAttribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
 
   return (
     <MapContainer
       center={center}
       zoom={visible.length > 0 ? 14 : 10}
+      zoomControl={false}
+      attributionControl={false}
       className="h-full w-full"
     >
       <InvalidateOnMount />
+      {/* Zoom buttons bottom-right (lifted above the mobile bottom nav via globals.css) */}
+      <ZoomControl position="bottomright" />
       <TileLayer key={tileUrl} url={tileUrl} attribution={tileAttribution} subdomains="abcd" />
 
       {/* Fixed trip reference pins */}
