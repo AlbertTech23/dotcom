@@ -6,6 +6,77 @@ body {
   font-family: system-ui, -apple-system, sans-serif;
 }
 
+/* ============================================================
+   App canvas — "wayfinding surface"
+   A blend of an atmospheric dawn gradient (depth) and a faint,
+   masked transit grid + coordinate ticks (the brand identity).
+   Rendered as two FIXED layers behind all content (z-index:-1)
+   so it reads as a quiet surface the cards float on, never
+   scrolling or competing with dense tables. Brand-indigo only.
+   ------------------------------------------------------------ */
+html { background: #F8FAFC; }            /* base fallback (light) */
+html.dark { background: #0F172A; }       /* base fallback (dark)  */
+
+/* Layer 1 — base + dawn glow (atmosphere) */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(125% 70% at 50% -12%, rgba(99, 102, 241, 0.13), transparent 58%),
+    radial-gradient(90% 50% at 84% 0%, rgba(37, 99, 235, 0.07), transparent 55%),
+    linear-gradient(180deg, #EDF1FB 0%, #F8FAFC 44%);
+}
+html.dark body::before {
+  background:
+    radial-gradient(125% 70% at 50% -12%, rgba(99, 102, 241, 0.20), transparent 56%),
+    radial-gradient(90% 50% at 84% 0%, rgba(37, 99, 235, 0.11), transparent 55%),
+    linear-gradient(180deg, #141C30 0%, #0F172A 46%);
+}
+
+/* Layer 2 — masked transit grid + sparse coordinate ticks (identity) */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='92' height='92'%3E%3Cg stroke='%234f46e5' stroke-width='1.1' opacity='0.4'%3E%3Cline x1='46' y1='40' x2='46' y2='52'/%3E%3Cline x1='40' y1='46' x2='52' y2='46'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(to right, rgba(79, 70, 229, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(79, 70, 229, 0.06) 1px, transparent 1px);
+  background-size: 92px 92px, 46px 46px, 46px 46px;
+  -webkit-mask-image: radial-gradient(125% 92% at 50% 0%, #000 0%, rgba(0, 0, 0, 0.4) 40%, transparent 72%);
+          mask-image: radial-gradient(125% 92% at 50% 0%, #000 0%, rgba(0, 0, 0, 0.4) 40%, transparent 72%);
+}
+html.dark body::after {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='92' height='92'%3E%3Cg stroke='%23818cf8' stroke-width='1.1' opacity='0.4'%3E%3Cline x1='46' y1='40' x2='46' y2='52'/%3E%3Cline x1='40' y1='46' x2='52' y2='46'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(to right, rgba(129, 140, 248, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(129, 140, 248, 0.07) 1px, transparent 1px);
+  background-size: 92px 92px, 46px 46px, 46px 46px;
+}
+
+/* Hint of parallax — the grid layer drifts up slowly as the page scrolls while
+   the gradient stays fixed, so content gently pulls past it. Scroll-driven (no
+   JS): browsers without scroll-timeline support keep the static fixed grid, and
+   reduced-motion users opt out entirely. Drift is bounded (~16% of a viewport)
+   regardless of page length, so it stays a hint, never a moving wallpaper. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: scroll()) {
+    body::after {
+      will-change: transform;
+      animation: canvas-grid-drift linear both;
+      animation-timeline: scroll(root block);
+    }
+  }
+}
+@keyframes canvas-grid-drift {
+  to { transform: translateY(-16%); }
+}
+
 /* QR scanner viewfinder — make Html5Qrcode video fill the container */
 #qr-viewfinder video {
   width: 100% !important;
