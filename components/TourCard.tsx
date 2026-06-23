@@ -77,18 +77,28 @@ export function TourCard({
       if (dx || dy) el.style.transform = `translate(${dx}px, ${dy}px)`
     }
 
+    // Onborda measures the spotlight "hole" once per step and only re-reads it on
+    // window *resize* — never on scroll. When a step activates while the page is
+    // still mid-smooth-scroll from the previous step, it captures a stale rect and
+    // the highlight lands on empty space (the element looks un-highlighted). Poke
+    // its resize handler so it re-measures the element's *current* position — this
+    // also makes the spotlight track the element as the scroll settles.
+    const syncHighlight = () => window.dispatchEvent(new Event('resize'))
+
     // Clamp immediately, then again as Onborda's card/pointer transition (~300ms)
     // and the smooth scrollIntoView settle — the element's final rect isn't known
     // until both finish, and either can leave the card off-screen.
     const raf = requestAnimationFrame(clamp)
-    const timers = [120, 360, 700].map(ms => setTimeout(clamp, ms))
+    const timers = [120, 360, 700].map(ms => setTimeout(() => { syncHighlight(); clamp() }, ms))
+    // resize handler only re-clamps — never re-dispatches, or syncHighlight would loop.
     window.addEventListener('resize', clamp)
-    window.addEventListener('scroll', clamp, true) // capture: catch scroll on any container
+    const onScroll = () => { syncHighlight(); clamp() }
+    window.addEventListener('scroll', onScroll, true) // capture: catch scroll on any container
     return () => {
       cancelAnimationFrame(raf)
       timers.forEach(clearTimeout)
       window.removeEventListener('resize', clamp)
-      window.removeEventListener('scroll', clamp, true)
+      window.removeEventListener('scroll', onScroll, true)
     }
   }, [currentStep, step])
 
