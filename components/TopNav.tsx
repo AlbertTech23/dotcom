@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import type { Profile, MemberPrivate } from '@/types/database'
+import { isAdminViewActive } from '@/lib/admin-view'
 import { DesktopNav } from './DesktopNav'
 
 /**
@@ -20,7 +21,9 @@ export async function TopNav() {
   const me = data as Pick<Profile, 'role' | 'location_sharing'> | null
   if (!me) return null
 
-  const isStaff = me.role === 'admin' || me.role === 'committee'
+  const adminView = await isAdminViewActive()
+  // Committee count as staff only while admin view is unlocked.
+  const isStaff = me.role === 'admin' || (me.role === 'committee' && adminView)
 
   let qrToken: string | null = null
   if (!isStaff) {
@@ -38,6 +41,8 @@ export async function TopNav() {
       homeHref={isStaff ? '/dashboard' : '/me'}
       qrToken={qrToken}
       locationSharing={me.location_sharing ?? false}
+      isCommittee={me.role === 'committee'}
+      adminView={adminView}
     />
   )
 }

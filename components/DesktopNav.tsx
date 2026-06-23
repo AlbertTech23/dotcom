@@ -8,7 +8,9 @@ import { QrDisplay } from '@/components/QrDisplay'
 import { NavLocationToggle } from '@/components/NavLocationToggle'
 import { TourButton } from '@/components/TourButton'
 import { ThemeToggle } from '@/components/ThemeToggle'
-import { Home, Armchair, MapPin, Users, Building2, ScanLine, QrCode, UserPlus, LogOut, X } from 'lucide-react'
+import { AdminViewGate } from '@/components/AdminViewGate'
+import { exitAdminView } from '@/app/actions/admin-view'
+import { Home, Armchair, MapPin, Users, Building2, ScanLine, QrCode, UserPlus, LogOut, X, UserCircle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 interface Props {
@@ -16,6 +18,9 @@ interface Props {
   homeHref: string
   qrToken?: string | null
   locationSharing: boolean
+  /** Committee get a control to switch between personal and admin views. */
+  isCommittee?: boolean
+  adminView?: boolean
 }
 
 /**
@@ -24,7 +29,7 @@ interface Props {
  * in the staff actions (scan, add member) and the shared utilities (location,
  * tour, theme, sign out) so there's exactly one bar on desktop.
  */
-export function DesktopNav({ isStaff, homeHref, qrToken, locationSharing }: Props) {
+export function DesktopNav({ isStaff, homeHref, qrToken, locationSharing, isCommittee, adminView }: Props) {
   const pathname = usePathname()
   const [qrOpen, setQrOpen] = useState(false)
 
@@ -116,6 +121,22 @@ export function DesktopNav({ isStaff, homeHref, qrToken, locationSharing }: Prop
                 <QrCode size={16} />
                 My QR
               </button>
+            )
+          )}
+
+          {isCommittee && (
+            adminView ? (
+              <form action={exitAdminView}>
+                <button
+                  type="submit"
+                  className="flex items-center gap-1.5 border border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 text-xs font-semibold px-3 py-1.5 rounded-lg transition"
+                >
+                  <UserCircle size={13} />
+                  Personal View
+                </button>
+              </form>
+            ) : (
+              <AdminViewGate variant="chip" />
             )
           )}
 

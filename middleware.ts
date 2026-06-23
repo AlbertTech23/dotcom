@@ -55,6 +55,10 @@ export async function middleware(request: NextRequest) {
 
   const role = profile?.role ?? 'member'
   const isPrivileged = role === 'admin' || role === 'committee'
+  // Committee default to the personal view; the dashboard is unlocked per-session
+  // via the admin-view code (sets this cookie). Read it directly here — next/headers
+  // cookies() isn't available in middleware.
+  const adminView = request.cookies.get('admin_view')?.value === '1'
 
   // Shared routes — accessible to all authenticated users
   if (
@@ -70,8 +74,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
-  // /dashboard: only admin and committee
-  if (pathname.startsWith('/dashboard') && !isPrivileged) {
+  // /dashboard: pure admins always; committee only after unlocking admin view;
+  // everyone else goes to their personal page.
+  if (pathname.startsWith('/dashboard') && !(role === 'admin' || (role === 'committee' && adminView))) {
     return NextResponse.redirect(new URL('/me', request.url))
   }
 

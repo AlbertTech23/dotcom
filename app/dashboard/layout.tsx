@@ -5,6 +5,7 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 import { TourButton } from '@/components/TourButton'
 import { NavLocationToggle } from '@/components/NavLocationToggle'
 import { Logo } from '@/components/Logo'
+import { exitAdminView } from '@/app/actions/admin-view'
 import type { Profile } from '@/types/database'
 import { UserPlus, LogOut, UserCircle } from 'lucide-react'
 
@@ -38,11 +39,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </Link>
 
         {isCommittee && (
-          <Link href="/me"
-            className="flex items-center gap-1.5 border border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 text-xs font-semibold px-3 py-1.5 rounded-lg transition">
-            <UserCircle size={13} />
-            <span className="hidden sm:inline">Member View</span>
-          </Link>
+          <form action={exitAdminView}>
+            <button type="submit"
+              className="flex items-center gap-1.5 border border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 text-xs font-semibold px-3 py-1.5 rounded-lg transition">
+              <UserCircle size={13} />
+              <span className="hidden sm:inline">Personal View</span>
+            </button>
+          </form>
         )}
         <Link href="/dashboard/members/new" id="onb-add-member" title="Add member"
           className="flex items-center gap-1.5 border border-slate-300 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-400 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg transition">

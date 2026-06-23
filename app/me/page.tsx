@@ -8,9 +8,10 @@ import { ChangePassword } from '@/components/ChangePassword'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { TourButton } from '@/components/TourButton'
 import { Logo } from '@/components/Logo'
+import { AdminViewGate } from '@/components/AdminViewGate'
 import { toWaNumber } from '@/lib/utils'
 import type { Profile, MemberPrivate } from '@/types/database'
-import { Armchair, MapPin, Users, Building2, LogOut, LayoutDashboard } from 'lucide-react'
+import { Armchair, MapPin, Users, Building2, LogOut } from 'lucide-react'
 
 export default async function MePage() {
   const supabase = await createClient()
@@ -86,12 +87,9 @@ export default async function MePage() {
         <div className="flex items-center justify-between gap-1">
           <Logo size="bar" />
           <div className="flex items-center gap-1">
+          {/* Mobile only — on desktop the switch lives in the top nav (DesktopNav). */}
           {profile.role === 'committee' && (
-            <a href="/dashboard"
-              className="flex items-center gap-1.5 border border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 text-xs font-semibold px-3 py-1.5 rounded-lg transition mr-1">
-              <LayoutDashboard size={13} />
-              Admin View
-            </a>
+            <div className="mr-1 md:hidden"><AdminViewGate variant="chip" /></div>
           )}
           <TourButton tourId="member" />
           <ThemeToggle />
