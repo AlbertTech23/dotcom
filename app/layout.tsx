@@ -7,7 +7,6 @@ import { OnboardingController } from '@/components/OnboardingController'
 import { NavigationProgress } from '@/components/NavigationProgress'
 import { FooterNav } from '@/components/FooterNav'
 import { TopNav } from '@/components/TopNav'
-import { PwaPrompt } from '@/components/PwaPrompt'
 import { AppToaster } from '@/components/AppToaster'
 import { tours } from '@/lib/tours'
 
@@ -34,7 +33,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             >
               <NavigationProgress />
               <OnboardingController />
-              <PwaPrompt />
               <TopNav />
               {children}
               <FooterNav />

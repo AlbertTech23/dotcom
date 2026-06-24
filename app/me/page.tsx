@@ -10,6 +10,7 @@ import { TourButton } from '@/components/TourButton'
 import { Logo } from '@/components/Logo'
 import { AdminViewGate } from '@/components/AdminViewGate'
 import { ContactPanitia } from '@/components/ContactPanitia'
+import { PwaPrompt } from '@/components/PwaPrompt'
 import type { Profile, MemberPrivate } from '@/types/database'
 import { Armchair, MapPin, Users, Building2, LogOut } from 'lucide-react'
 
@@ -85,6 +86,7 @@ export default async function MePage() {
 
   return (
     <div className="min-h-screen px-4 py-6 pb-28">
+      <PwaPrompt />
       <div className="max-w-sm mx-auto w-full space-y-4">
         {/* Top bar: logo on the left, tour / theme / admin switch on the right */}
         <div className="flex items-center justify-between gap-1">

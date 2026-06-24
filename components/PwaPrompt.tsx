@@ -4,7 +4,7 @@ import { X, Share, Download } from 'lucide-react'
 import { LogoMark } from '@/components/Logo'
 
 const DISMISS_KEY = 'dotcom-install-dismissed'
-const SNOOZE_MS = 1000 * 60 * 60 * 24 * 14 // re-offer after 14 days
+const SNOOZE_MS = 1000 * 60 * 60 * 24 // re-offer after 24 hours
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -15,7 +15,7 @@ interface BeforeInstallPromptEvent extends Event {
  * Registers the service worker and shows a closeable "install" banner on every
  * page. Android/desktop Chrome get the native install prompt; iOS Safari gets
  * Add-to-Home-Screen instructions (Apple has no programmatic prompt). Hidden when
- * already installed (standalone) or recently dismissed.
+ * already installed (standalone) or dismissed within the last 24 hours.
  */
 export function PwaPrompt() {
   const [mode, setMode] = useState<'android' | 'ios' | null>(null)
@@ -36,7 +36,7 @@ export function PwaPrompt() {
       (window.navigator as unknown as { standalone?: boolean }).standalone === true
     if (standalone) return
 
-    // Recently dismissed → stay quiet.
+    // Recently dismissed → stay quiet, then re-offer after the snooze window.
     const dismissedAt = Number(localStorage.getItem(DISMISS_KEY) || 0)
     if (dismissedAt && Date.now() - dismissedAt < SNOOZE_MS) return
 

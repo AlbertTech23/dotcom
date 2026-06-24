@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { mergePrivate } from '@/lib/supabase/with-private'
 import { DashboardClient } from '@/components/DashboardClient'
+import { PwaPrompt } from '@/components/PwaPrompt'
 import { MyQrButton } from '@/components/MyQrButton'
 import { exitAdminView } from '@/app/actions/admin-view'
 import { UserCircle } from 'lucide-react'
@@ -35,6 +36,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <PwaPrompt />
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h1 id="onb-admin-header" className="text-2xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
         {myQrToken && <MyQrButton token={myQrToken} />}
