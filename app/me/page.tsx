@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { QrDisplay } from '@/components/QrDisplay'
-import { StatusBadge } from '@/components/StatusBadge'
+import { LiveStatusBadge } from '@/components/LiveStatusBadge'
 import { LocationToggle } from '@/components/LocationToggle'
 import { ChangePassword } from '@/components/ChangePassword'
 import { ThemeToggle } from '@/components/ThemeToggle'
@@ -116,7 +116,7 @@ export default async function MePage() {
             )}
 
             <div id="onb-status" className="mt-3">
-              <StatusBadge status={profile.status} />
+              <LiveStatusBadge id={profile.id} initialStatus={profile.status} />
             </div>
 
             {priv?.student_id && (

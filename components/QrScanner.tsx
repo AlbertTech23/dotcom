@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { CheckCircle2, LogOut as LogOutIcon, AlertTriangle, ArrowRight, Camera } from 'lucide-react'
+import { CheckCircle2, LogOut as LogOutIcon, AlertTriangle, ArrowRight, Camera, Loader2 } from 'lucide-react'
 
 interface ScanResult {
   full_name: string
@@ -13,6 +13,7 @@ export function QrScanner() {
   const [error, setError]           = useState('')
   const [cameraActive, setCameraActive] = useState(false)
   const [scanning, setScanning]     = useState(true)
+  const [processing, setProcessing] = useState(false)
   const scannerRef = useRef<{
     stop: () => Promise<void>
     pause: (shouldPauseVideo?: boolean) => void
@@ -47,6 +48,7 @@ export function QrScanner() {
           // Pause decoding so no further frames fire while we toggle + show result.
           try { scannerRef.current?.pause(true) } catch { /* not started yet */ }
           setScanning(false)
+          setProcessing(true)
           try {
             const res = await fetch('/api/admin/scan', {
               method: 'POST',
@@ -60,6 +62,7 @@ export function QrScanner() {
           } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Unknown error')
           } finally {
+            setProcessing(false)
             // After the result/error has been shown, resume scanning for the next QR.
             setTimeout(() => {
               setResult(null)
@@ -127,6 +130,16 @@ export function QrScanner() {
           )}
         </div>
       </div>
+
+      {/* ── Processing overlay (shown during the ~0.5–1s toggle round-trip) ── */}
+      {processing && (
+        <div className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-5 text-center space-y-2">
+          <div className="flex justify-center">
+            <Loader2 size={40} className="text-blue-500 dark:text-blue-400 animate-spin" />
+          </div>
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Updating bus status…</p>
+        </div>
+      )}
 
       {/* ── Success overlay ── */}
       {result && (
