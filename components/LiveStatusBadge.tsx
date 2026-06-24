@@ -17,12 +17,16 @@ export function LiveStatusBadge({ id, initialStatus }: { id: string; initialStat
     const supabase = createClient()
     const channel = supabase
       .channel(`me-status-${id}`)
+      // No server-side `filter:` — every working realtime subscription in this app
+      // (MapView, BusesView, DashboardClient…) subscribes to the whole table and
+      // narrows in the callback. A filtered own-row subscription silently delivered
+      // nothing here, so we match the proven pattern and match the id ourselves.
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${id}` },
+        { event: 'UPDATE', schema: 'public', table: 'profiles' },
         payload => {
-          const next = (payload.new as { status?: Status }).status
-          if (next) setStatus(next)
+          const row = payload.new as { id?: string; status?: Status }
+          if (row.id === id && row.status) setStatus(row.status)
         },
       )
       .subscribe()
