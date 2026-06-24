@@ -13,13 +13,21 @@ export function QrScanner() {
   const [error, setError]           = useState('')
   const [cameraActive, setCameraActive] = useState(false)
   const [scanning, setScanning]     = useState(true)
-  const scannerRef = useRef<{ stop: () => Promise<void> } | null>(null)
+  const scannerRef = useRef<{
+    stop: () => Promise<void>
+    pause: (shouldPauseVideo?: boolean) => void
+    resume: () => void
+  } | null>(null)
+  // Synchronous re-entrancy guard. html5-qrcode fires the success callback once
+  // per decoded frame (~10/sec), so without this a single QR in view would spam
+  // /api/admin/scan and flip status on→off→on… many times a second.
+  const busyRef = useRef(false)
 
   const startCamera = useCallback(async () => {
     try {
       const { Html5Qrcode } = await import('html5-qrcode')
       const scanner = new Html5Qrcode('qr-viewfinder')
-      scannerRef.current = scanner as unknown as { stop: () => Promise<void> }
+      scannerRef.current = scanner as unknown as typeof scannerRef.current
 
       await scanner.start(
         { facingMode: 'environment' },
@@ -33,6 +41,11 @@ export function QrScanner() {
           },
         },
         async (decodedText: string) => {
+          // Drop frames that arrive while a scan is already being processed.
+          if (busyRef.current) return
+          busyRef.current = true
+          // Pause decoding so no further frames fire while we toggle + show result.
+          try { scannerRef.current?.pause(true) } catch { /* not started yet */ }
           setScanning(false)
           try {
             const res = await fetch('/api/admin/scan', {
@@ -44,10 +57,17 @@ export function QrScanner() {
             if (!res.ok) throw new Error(data.error ?? 'Scan failed')
             setResult(data)
             if ('vibrate' in navigator) navigator.vibrate(200)
-            setTimeout(() => { setResult(null); setScanning(true) }, 3000)
           } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Unknown error')
-            setTimeout(() => { setError(''); setScanning(true) }, 3000)
+          } finally {
+            // After the result/error has been shown, resume scanning for the next QR.
+            setTimeout(() => {
+              setResult(null)
+              setError('')
+              setScanning(true)
+              try { scannerRef.current?.resume() } catch { /* ignore */ }
+              busyRef.current = false
+            }, 3000)
           }
         },
         () => { /* suppress per-frame decode errors */ },
@@ -67,7 +87,9 @@ export function QrScanner() {
   return (
     <div className="flex flex-col items-center gap-5">
       {/* ── Viewfinder square ── */}
-      {scanning && (
+      {/* Stays mounted (hidden, not unmounted) while a result shows so the
+          html5-qrcode video element survives for pause()/resume(). */}
+      <div className={scanning ? 'contents' : 'hidden'}>
         <div className="relative w-full max-w-sm aspect-square rounded-2xl overflow-hidden bg-slate-900 shadow-inner">
           {/* Html5Qrcode mounts the <video> element here */}
           <div id="qr-viewfinder" className="w-full h-full" />
@@ -104,7 +126,7 @@ export function QrScanner() {
             </div>
           )}
         </div>
-      )}
+      </div>
 
       {/* ── Success overlay ── */}
       {result && (
