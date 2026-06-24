@@ -1,5 +1,6 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -82,29 +83,54 @@ function GroupRenameInput({
 
 // ── Dropdown to pick a group for a member ────────────────────
 function GroupPicker({
+  anchor,
   current,
   options,
   onPick,
   onClose,
 }: {
+  anchor: HTMLElement | null
   current: string | null
   options: string[]
   onPick: (label: string | null) => void
   onClose: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null)
+
+  // Anchor the dropdown to the button via fixed positioning so the card's
+  // `overflow-hidden` can't clip it.
+  useLayoutEffect(() => {
+    if (!anchor) return
+    const r = anchor.getBoundingClientRect()
+    setPos({ top: r.bottom + 4, right: window.innerWidth - r.right })
+  }, [anchor])
+
   useEffect(() => {
     function handle(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+      if (
+        ref.current && !ref.current.contains(e.target as Node) &&
+        anchor && !anchor.contains(e.target as Node)
+      ) onClose()
     }
     document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
-  }, [onClose])
+    // Close on scroll/resize since the fixed position would otherwise drift.
+    window.addEventListener('scroll', onClose, true)
+    window.addEventListener('resize', onClose)
+    return () => {
+      document.removeEventListener('mousedown', handle)
+      window.removeEventListener('scroll', onClose, true)
+      window.removeEventListener('resize', onClose)
+    }
+  }, [onClose, anchor])
 
-  return (
+  if (!pos) return null
+
+  return createPortal(
     <div
       ref={ref}
-      className="absolute right-0 top-8 z-50 min-w-[160px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-xl overflow-hidden"
+      style={{ position: 'fixed', top: pos.top, right: pos.right }}
+      className="z-50 min-w-[160px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-xl overflow-hidden"
     >
       {options.map(o => (
         <button
@@ -128,7 +154,8 @@ function GroupPicker({
           </button>
         </>
       )}
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -378,39 +405,16 @@ export function GroupsView({ initialProfiles, persistedGroups, isAdmin, myGroupL
             {/* Member rows */}
             <div className="divide-y divide-slate-100 dark:divide-slate-700/60">
               {members.map(member => (
-                <div key={member.id} className="flex items-center justify-between px-4 py-2.5">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-slate-900 dark:text-white text-sm truncate">{member.full_name}</span>
-                    {member.student_id && (
-                      <span className="text-slate-400 text-xs hidden sm:block">{member.student_id}</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <StatusBadge status={member.status} />
-
-                    {/* Group move picker (admin only) */}
-                    {isAdmin && options.length > 0 && (
-                      <div className="relative">
-                        <button
-                          onClick={() => setPickerMemberId(pickerMemberId === member.id ? null : member.id)}
-                          className="flex items-center gap-0.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 rounded"
-                          title="Move to group"
-                        >
-                          <ChevronDown size={13} />
-                        </button>
-                        {pickerMemberId === member.id && (
-                          <GroupPicker
-                            current={member.group_label ?? null}
-                            options={options}
-                            onPick={label => assignMember(member.id, label)}
-                            onClose={() => setPickerMemberId(null)}
-                          />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <MemberRow
+                  key={member.id}
+                  member={member}
+                  isAdmin={isAdmin}
+                  options={options}
+                  isPickerOpen={pickerMemberId === member.id}
+                  onToggle={() => setPickerMemberId(pickerMemberId === member.id ? null : member.id)}
+                  onPick={label => assignMember(member.id, label)}
+                  onClose={() => setPickerMemberId(null)}
+                />
               ))}
             </div>
           </div>
@@ -426,5 +430,63 @@ export function GroupsView({ initialProfiles, persistedGroups, isAdmin, myGroupL
         onCancel={() => setDeletingGroup(null)}
       />
     </div>
+  )
+}
+
+// ── Single member row with its group-move picker ─────────────
+function MemberRow({
+  member,
+  isAdmin,
+  options,
+  isPickerOpen,
+  onToggle,
+  onPick,
+  onClose,
+}: {
+  member: Profile
+  isAdmin: boolean
+  options: string[]
+  isPickerOpen: boolean
+  onToggle: () => void
+  onPick: (label: string | null) => void
+  onClose: () => void
+}) {
+  const btnRef = useRef<HTMLButtonElement>(null)
+  return (
+                <div className="flex items-center justify-between px-4 py-2.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-slate-900 dark:text-white text-sm truncate">{member.full_name}</span>
+                    {member.student_id && (
+                      <span className="text-slate-400 text-xs hidden sm:block">{member.student_id}</span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <StatusBadge status={member.status} />
+
+                    {/* Group move picker (admin only) */}
+                    {isAdmin && options.length > 0 && (
+                      <div className="relative">
+                        <button
+                          ref={btnRef}
+                          onClick={onToggle}
+                          className="flex items-center gap-0.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 rounded"
+                          title="Move to group"
+                        >
+                          <ChevronDown size={13} />
+                        </button>
+                        {isPickerOpen && (
+                          <GroupPicker
+                            anchor={btnRef.current}
+                            current={member.group_label ?? null}
+                            options={options}
+                            onPick={onPick}
+                            onClose={onClose}
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
   )
 }
