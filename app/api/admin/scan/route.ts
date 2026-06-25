@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { isBusTraveler, TRAVEL_MODE_LABELS } from '@/lib/utils'
-import { parseBody, serverError } from '@/lib/api'
+import { parseBody, serverError, enforceLimit } from '@/lib/api'
 import { scanSchema } from '@/lib/schemas'
 import type { Profile } from '@/types/database'
 
@@ -16,6 +16,9 @@ export async function POST(req: NextRequest) {
   // returns nothing anyway; we still gate every write on the role check below.
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const limited = await enforceLimit('scan', user.id)
+  if (limited) return limited
 
   const parsed = await parseBody(req, scanSchema)
   if ('res' in parsed) return parsed.res

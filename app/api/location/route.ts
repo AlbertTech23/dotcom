@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { parseBody, serverError } from '@/lib/api'
+import { parseBody, serverError, enforceLimit } from '@/lib/api'
 import { locationUpdateSchema, locationShareSchema } from '@/lib/schemas'
 
 // POST — update own coordinates (called by LocationToggle on interval)
@@ -9,6 +9,9 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const limited = await enforceLimit('location', user.id)
+  if (limited) return limited
 
   // Reject anything that isn't a real coordinate (null, NaN, strings, out-of-range)
   // so we never persist garbage into the float8 columns that the whole roster reads.
@@ -36,6 +39,9 @@ export async function PATCH(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const limited = await enforceLimit('location', user.id)
+  if (limited) return limited
 
   const parsed = await parseBody(req, locationShareSchema)
   if ('res' in parsed) return parsed.res

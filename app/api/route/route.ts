@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { parseBody } from '@/lib/api'
+import { parseBody, enforceLimit } from '@/lib/api'
 import { routeSchema } from '@/lib/schemas'
 
 // POST /api/route — road route between two points via OpenRouteService.
@@ -10,6 +10,10 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Cap per-user calls — this proxies the paid OpenRouteService quota.
+  const limited = await enforceLimit('routing', user.id)
+  if (limited) return limited
 
   const key = process.env.ORS_API_KEY
   if (!key) return NextResponse.json({ error: 'Routing is not configured (ORS_API_KEY missing)' }, { status: 503 })
