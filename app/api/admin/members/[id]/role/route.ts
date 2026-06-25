@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireSuperAdmin } from '@/lib/supabase/require-admin'
+import { parseBody, serverError } from '@/lib/api'
+import { roleSchema } from '@/lib/schemas'
 
 // 'admin' is deliberately NOT assignable through the app — admins are seeded
 // directly in the database. The app can only move people between member/committee.
-const ASSIGNABLE_ROLES = ['committee', 'member'] as const
-type Role = typeof ASSIGNABLE_ROLES[number]
 
 export async function PATCH(
   request: Request,
@@ -26,11 +26,11 @@ export async function PATCH(
     return NextResponse.json({ error: 'You cannot change your own role' }, { status: 400 })
   }
 
-  const { role } = await request.json() as { role: Role }
-  // Hard block: never allow granting admin via the API, under any circumstance.
-  if (!ASSIGNABLE_ROLES.includes(role)) {
-    return NextResponse.json({ error: 'Role must be member or committee' }, { status: 400 })
-  }
+  // Hard block: never allow granting admin via the API — the schema only accepts
+  // member/committee, so any other value is rejected with a 400.
+  const parsed = await parseBody(request, roleSchema)
+  if ('res' in parsed) return parsed.res
+  const { role } = parsed.data
 
   // Refuse to touch an existing admin's row through this endpoint either.
   const { data: target } = await supabase.from('profiles').select('role').eq('id', id).single()
@@ -43,6 +43,6 @@ export async function PATCH(
     .update({ role })
     .eq('id', id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return serverError('members.role', error)
   return NextResponse.json({ ok: true, role })
 }

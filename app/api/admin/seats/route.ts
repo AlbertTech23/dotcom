@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/supabase/require-admin'
+import { parseBody, serverError } from '@/lib/api'
+import { seatAssignSchema, seatUnassignSchema } from '@/lib/schemas'
 
 // POST /api/admin/seats — assign a member to a seat
 // Body: { memberId, busNumber, seatNumber }
@@ -9,10 +11,9 @@ export async function POST(req: NextRequest) {
   const denied = await requireAdmin(supabase)
   if (denied) return denied
 
-  const { memberId, busNumber, seatNumber } = await req.json()
-  if (!memberId || !busNumber || !seatNumber) {
-    return NextResponse.json({ error: 'memberId, busNumber, seatNumber required' }, { status: 400 })
-  }
+  const parsed = await parseBody(req, seatAssignSchema)
+  if ('res' in parsed) return parsed.res
+  const { memberId, busNumber, seatNumber } = parsed.data
 
   // Free up the target seat if it's already taken by someone else
   await supabase
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
     .update({ bus_number: busNumber, seat_number: seatNumber, status: 'off_bus', last_changed_at: new Date().toISOString() })
     .eq('id', memberId)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return serverError('seats.assign', error)
 
   return NextResponse.json({ success: true })
 }
@@ -42,15 +43,16 @@ export async function DELETE(req: NextRequest) {
   const denied = await requireAdmin(supabase)
   if (denied) return denied
 
-  const { memberId } = await req.json()
-  if (!memberId) return NextResponse.json({ error: 'memberId required' }, { status: 400 })
+  const parsed = await parseBody(req, seatUnassignSchema)
+  if ('res' in parsed) return parsed.res
+  const { memberId } = parsed.data
 
   const { error } = await supabase
     .from('profiles')
     .update({ bus_number: null, seat_number: null })
     .eq('id', memberId)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return serverError('seats.unassign', error)
 
   return NextResponse.json({ success: true })
 }

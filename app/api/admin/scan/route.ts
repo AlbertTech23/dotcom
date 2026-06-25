@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { isBusTraveler, TRAVEL_MODE_LABELS } from '@/lib/utils'
+import { parseBody, serverError } from '@/lib/api'
+import { scanSchema } from '@/lib/schemas'
 import type { Profile } from '@/types/database'
 
 type ScanMember = Pick<Profile, 'id' | 'full_name' | 'status' | 'role' | 'seat_number' | 'travel_mode'>
@@ -15,8 +17,9 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { qr_token } = await req.json()
-  if (!qr_token) return NextResponse.json({ error: 'Missing qr_token' }, { status: 400 })
+  const parsed = await parseBody(req, scanSchema)
+  if ('res' in parsed) return parsed.res
+  const { qr_token } = parsed.data
 
   const [callerRes, lookupRes] = await Promise.all([
     supabase.from('profiles').select('role').eq('id', user.id).single(),
@@ -62,7 +65,7 @@ export async function POST(req: NextRequest) {
     .update({ status: newStatus, last_changed_at: new Date().toISOString() })
     .eq('id', member.id)
 
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
+  if (updateError) return serverError('scan.update', updateError)
 
   await supabase.from('status_logs').insert({
     member_id:  member.id,

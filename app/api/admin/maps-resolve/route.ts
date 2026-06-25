@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/supabase/require-admin'
 import { parseLatLngFromMapsUrl, isAllowedMapsHost } from '@/lib/utils'
+import { parseBody } from '@/lib/api'
+import { mapsResolveSchema } from '@/lib/schemas'
 
 // Follow a Google Maps short link to its destination WITHOUT letting it reach
 // internal infrastructure (SSRF guard): every hop's host must be a Google Maps
@@ -45,10 +47,9 @@ export async function POST(req: NextRequest) {
   const denied = await requireAdmin(supabase)
   if (denied) return denied
 
-  const { url } = await req.json()
-  if (!url || typeof url !== 'string') {
-    return NextResponse.json({ error: 'Paste a Google Maps link' }, { status: 400 })
-  }
+  const parsed = await parseBody(req, mapsResolveSchema)
+  if ('res' in parsed) return parsed.res
+  const { url } = parsed.data
 
   // Full URL pasted directly? Parse without a network call.
   let coords = parseLatLngFromMapsUrl(url)

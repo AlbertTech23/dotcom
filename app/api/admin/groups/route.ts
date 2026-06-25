@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/supabase/require-admin'
+import { parseBody, serverError } from '@/lib/api'
+import { groupCreateSchema, groupReassignSchema, groupRenameSchema, groupDeleteSchema } from '@/lib/schemas'
 
 // POST /api/admin/groups — create a group (registry row, so it persists empty)
 export async function POST(req: NextRequest) {
@@ -8,11 +10,12 @@ export async function POST(req: NextRequest) {
   const denied = await requireAdmin(supabase)
   if (denied) return denied
 
-  const { name } = await req.json()
-  if (!name?.trim()) return NextResponse.json({ error: 'Group name is required' }, { status: 400 })
+  const parsed = await parseBody(req, groupCreateSchema)
+  if ('res' in parsed) return parsed.res
+  const { name } = parsed.data
 
-  const { error } = await supabase.from('groups').upsert({ name: name.trim() }, { onConflict: 'name' })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const { error } = await supabase.from('groups').upsert({ name }, { onConflict: 'name' })
+  if (error) return serverError('groups.create', error)
   return NextResponse.json({ ok: true }, { status: 201 })
 }
 
@@ -22,15 +25,16 @@ export async function PATCH(req: NextRequest) {
   const denied = await requireAdmin(supabase)
   if (denied) return denied
 
-  const { memberId, groupLabel } = await req.json()
-  if (!memberId) return NextResponse.json({ error: 'memberId required' }, { status: 400 })
+  const parsed = await parseBody(req, groupReassignSchema)
+  if ('res' in parsed) return parsed.res
+  const { memberId, groupLabel } = parsed.data
 
   const { error } = await supabase
     .from('profiles')
     .update({ group_label: groupLabel?.trim() || null })
     .eq('id', memberId)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return serverError('groups.reassign', error)
   return NextResponse.json({ ok: true })
 }
 
@@ -40,17 +44,18 @@ export async function PUT(req: NextRequest) {
   const denied = await requireAdmin(supabase)
   if (denied) return denied
 
-  const { oldLabel, newLabel } = await req.json()
-  if (!oldLabel || !newLabel?.trim()) return NextResponse.json({ error: 'oldLabel and newLabel required' }, { status: 400 })
+  const parsed = await parseBody(req, groupRenameSchema)
+  if ('res' in parsed) return parsed.res
+  const { oldLabel, newLabel } = parsed.data
 
   // Rename the registry row and every member carrying the old label.
-  await supabase.from('groups').update({ name: newLabel.trim() }).eq('name', oldLabel)
+  await supabase.from('groups').update({ name: newLabel }).eq('name', oldLabel)
   const { error } = await supabase
     .from('profiles')
-    .update({ group_label: newLabel.trim() })
+    .update({ group_label: newLabel })
     .eq('group_label', oldLabel)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return serverError('groups.rename', error)
   return NextResponse.json({ ok: true })
 }
 
@@ -60,8 +65,9 @@ export async function DELETE(req: NextRequest) {
   const denied = await requireAdmin(supabase)
   if (denied) return denied
 
-  const { label } = await req.json()
-  if (!label) return NextResponse.json({ error: 'label required' }, { status: 400 })
+  const parsed = await parseBody(req, groupDeleteSchema)
+  if ('res' in parsed) return parsed.res
+  const { label } = parsed.data
 
   // Remove the registry row and clear the label from any members in it.
   await supabase.from('groups').delete().eq('name', label)
@@ -70,6 +76,6 @@ export async function DELETE(req: NextRequest) {
     .update({ group_label: null })
     .eq('group_label', label)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return serverError('groups.delete', error)
   return NextResponse.json({ ok: true })
 }

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { parseBody } from '@/lib/api'
+import { routeSchema } from '@/lib/schemas'
 
 // POST /api/route — road route between two points via OpenRouteService.
 // The ORS key stays server-side. Any signed-in user may call it (the ruler is
@@ -12,12 +14,9 @@ export async function POST(req: NextRequest) {
   const key = process.env.ORS_API_KEY
   if (!key) return NextResponse.json({ error: 'Routing is not configured (ORS_API_KEY missing)' }, { status: 503 })
 
-  const { start, end } = await req.json()
-  const ok = (p: unknown): p is { lat: number; lng: number } =>
-    !!p && typeof (p as { lat?: unknown }).lat === 'number' && typeof (p as { lng?: unknown }).lng === 'number'
-  if (!ok(start) || !ok(end)) {
-    return NextResponse.json({ error: 'start and end coordinates are required' }, { status: 400 })
-  }
+  const parsed = await parseBody(req, routeSchema)
+  if ('res' in parsed) return parsed.res
+  const { start, end } = parsed.data
 
   try {
     // ORS expects [lng, lat] order.

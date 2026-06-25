@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/supabase/require-admin'
+import { serverError } from '@/lib/api'
 import { isBusTraveler, TRAVEL_MODE_LABELS } from '@/lib/utils'
 import type { TravelMode } from '@/types/database'
 
@@ -46,7 +47,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     .update({ status: newStatus, last_changed_at: new Date().toISOString() })
     .eq('id', id)
 
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
+  if (updateError) return serverError('toggle.update', updateError)
 
   await supabase.from('status_logs').insert({
     member_id:  id,

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/supabase/require-admin'
+import { parseBody, serverError } from '@/lib/api'
+import { roomPatchSchema } from '@/lib/schemas'
 
 // PATCH /api/admin/rooms/[id] — update room details
 export async function PATCH(
@@ -12,9 +14,11 @@ export async function PATCH(
   const denied = await requireAdmin(supabase)
   if (denied) return denied
 
-  const body = await req.json()
+  const parsed = await parseBody(req, roomPatchSchema)
+  if ('res' in parsed) return parsed.res
+  const body = parsed.data
   const update: Record<string, unknown> = {}
-  if (body.name   !== undefined) update.name     = body.name.trim() || null
+  if (body.name   !== undefined) update.name     = body.name?.trim() || null
   if (body.floor  !== undefined) update.floor    = body.floor  || null
   if (body.notes  !== undefined) update.notes    = body.notes  || null
   if (body.capacity !== undefined) update.capacity = body.capacity || null
@@ -26,7 +30,7 @@ export async function PATCH(
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return serverError('rooms.patch', error)
   return NextResponse.json(data)
 }
 
@@ -41,6 +45,6 @@ export async function DELETE(
   if (denied) return denied
 
   const { error } = await supabase.from('rooms').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return serverError('rooms.delete', error)
   return NextResponse.json({ ok: true })
 }

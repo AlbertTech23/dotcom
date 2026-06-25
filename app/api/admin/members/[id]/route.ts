@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/supabase/require-admin'
+import { parseBody, serverError } from '@/lib/api'
+import { memberPatchSchema } from '@/lib/schemas'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -10,7 +12,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const denied = await requireAdmin(supabase)
   if (denied) return denied
 
-  const body = await req.json()
+  const parsed = await parseBody(req, memberPatchSchema)
+  if ('res' in parsed) return parsed.res
+  const body = parsed.data
 
   // Only touch columns the caller actually sent — otherwise an omitted field
   // (e.g. full_name) would be written as null and break the NOT NULL constraint.
@@ -33,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (Object.keys(profileUpdate).length > 0) {
     const { error } = await supabase.from('profiles').update(profileUpdate).eq('id', id)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) return serverError('members.patch.profile', error)
   }
 
   // PII lives in member_private. Upsert only the provided fields so it works even
@@ -46,7 +50,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const { error: privateError } = await supabase
       .from('member_private')
       .upsert({ id, ...privateUpdate })
-    if (privateError) return NextResponse.json({ error: privateError.message }, { status: 500 })
+    if (privateError) return serverError('members.patch.private', privateError)
   }
 
   return NextResponse.json({ success: true })
@@ -62,7 +66,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const admin = createAdminClient()
   const { error } = await admin.auth.admin.deleteUser(id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return serverError('members.delete', error)
 
   return NextResponse.json({ success: true })
 }

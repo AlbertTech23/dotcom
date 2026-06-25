@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/supabase/require-admin'
 import { isSafeHttpUrl } from '@/lib/utils'
+import { parseBody, serverError } from '@/lib/api'
+import { markerPatchSchema } from '@/lib/schemas'
 
 // PATCH /api/admin/markers/[id] — edit a marker's label/icon/visibility/position.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -10,7 +12,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const denied = await requireAdmin(supabase)
   if (denied) return denied
 
-  const body = await req.json()
+  const parsed = await parseBody(req, markerPatchSchema)
+  if ('res' in parsed) return parsed.res
+  const body = parsed.data
   const patch: Record<string, unknown> = {}
   if (typeof body.label === 'string' && body.label.trim()) patch.label = body.label.trim()
   if (typeof body.icon === 'string') patch.icon = body.icon
@@ -29,7 +33,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const { data, error } = await supabase.from('map_markers').update(patch).eq('id', id).select().single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return serverError('markers.patch', error)
   return NextResponse.json(data)
 }
 

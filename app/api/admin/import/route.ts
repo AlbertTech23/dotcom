@@ -3,21 +3,12 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin, requireSuperAdmin } from '@/lib/supabase/require-admin'
 import { isDuplicateEmail } from '@/lib/supabase/auth-errors'
+import { parseBody } from '@/lib/api'
+import { importSchema } from '@/lib/schemas'
 
 // Bulk import creates member/committee accounts only — never admins.
 const VALID_ROLES = ['committee', 'member']
 const VALID_TRAVEL_MODES = ['bus', 'advance', 'convoy']
-
-interface MemberRow {
-  email: string
-  password: string
-  full_name: string
-  student_id?: string
-  phone?: string
-  group_label?: string
-  role?: string
-  travel_mode?: string
-}
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -25,11 +16,9 @@ export async function POST(req: NextRequest) {
   const denied = await requireAdmin(supabase)
   if (denied) return denied
 
-  const { members }: { members: MemberRow[] } = await req.json()
-
-  if (!Array.isArray(members) || members.length === 0) {
-    return NextResponse.json({ error: 'members array is required and must not be empty' }, { status: 400 })
-  }
+  const parsed = await parseBody(req, importSchema)
+  if ('res' in parsed) return parsed.res
+  const { members } = parsed.data
 
   // Assigning an elevated role (committee) is admin-only — committee can import
   // members but not escalate. Mirrors the single-member create endpoint.

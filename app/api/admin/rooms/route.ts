@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/supabase/require-admin'
+import { parseBody, serverError } from '@/lib/api'
+import { roomCreateSchema } from '@/lib/schemas'
 
 // GET /api/admin/rooms — list all rooms
 export async function GET() {
@@ -13,7 +15,7 @@ export async function GET() {
     .select('*')
     .order('created_at', { ascending: true })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return serverError('rooms.list', error)
   return NextResponse.json(data)
 }
 
@@ -23,10 +25,9 @@ export async function POST(req: NextRequest) {
   const denied = await requireAdmin(supabase)
   if (denied) return denied
 
-  const { name, floor, notes, capacity } = await req.json()
-  if (!name?.trim()) {
-    return NextResponse.json({ error: 'Room name is required' }, { status: 400 })
-  }
+  const parsed = await parseBody(req, roomCreateSchema)
+  if ('res' in parsed) return parsed.res
+  const { name, floor, notes, capacity } = parsed.data
 
   const { data, error } = await supabase
     .from('rooms')
@@ -34,6 +35,6 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return serverError('rooms.create', error)
   return NextResponse.json(data, { status: 201 })
 }

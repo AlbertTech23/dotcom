@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/supabase/require-admin'
+import { serverError } from '@/lib/api'
 
 export async function POST() {
   const supabase = await createClient()
@@ -15,7 +16,7 @@ export async function POST() {
     .eq('travel_mode', 'bus')   // Setup Crew / Convoy aren't tracked on/off the bus
     .eq('status', 'off_bus')
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return serverError('reset-all', error)
 
   return NextResponse.json({ success: true })
 }

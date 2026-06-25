@@ -3,9 +3,9 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin, requireSuperAdmin } from '@/lib/supabase/require-admin'
 import { isDuplicateEmail } from '@/lib/supabase/auth-errors'
+import { parseBody, serverError } from '@/lib/api'
+import { memberCreateSchema } from '@/lib/schemas'
 
-// Admin accounts are NOT created via this endpoint — only member/committee.
-const VALID_ROLES = ['committee', 'member']
 const VALID_TRAVEL_MODES = ['bus', 'advance', 'convoy']
 
 export async function POST(req: NextRequest) {
@@ -14,16 +14,13 @@ export async function POST(req: NextRequest) {
   const denied = await requireAdmin(supabase)
   if (denied) return denied
 
-  const body = await req.json()
-  const { email, password, full_name, student_id, phone, group_label, room_id, role, travel_mode } = body
-
-  if (!email || !password || !full_name) {
-    return NextResponse.json({ error: 'email, password, and full_name are required' }, { status: 400 })
-  }
+  const parsed = await parseBody(req, memberCreateSchema)
+  if ('res' in parsed) return parsed.res
+  const { email, password, full_name, student_id, phone, group_label, room_id, role, travel_mode } = parsed.data
 
   // Default to member. Assigning an elevated role (admin/committee) at creation is
   // admin-only — committee can create members but not escalate (mirrors the role endpoint).
-  const newRole = VALID_ROLES.includes(role) ? role : 'member'
+  const newRole = role ?? 'member'
   if (newRole !== 'member') {
     const notSuper = await requireSuperAdmin(supabase)
     if (notSuper) return notSuper
@@ -45,7 +42,7 @@ export async function POST(req: NextRequest) {
         { status: 409 },
       )
     }
-    return NextResponse.json({ error: authError?.message ?? 'Failed to create user' }, { status: 500 })
+    return serverError('members.createUser', authError)
   }
 
   // Upsert (not insert): the on_auth_user_created trigger already created a
@@ -56,12 +53,12 @@ export async function POST(req: NextRequest) {
     role:        newRole,
     group_label: group_label ?? null,
     room_id:     room_id ?? null,
-    travel_mode: VALID_TRAVEL_MODES.includes(travel_mode) ? travel_mode : 'bus',
+    travel_mode: travel_mode && VALID_TRAVEL_MODES.includes(travel_mode) ? travel_mode : 'bus',
   })
 
   if (profileError) {
     await admin.auth.admin.deleteUser(authData.user.id)
-    return NextResponse.json({ error: profileError.message }, { status: 500 })
+    return serverError('members.profileUpsert', profileError)
   }
 
   // Sensitive fields go to member_private. Upsert (not insert) because the
@@ -72,7 +69,7 @@ export async function POST(req: NextRequest) {
 
   if (privateError) {
     await admin.auth.admin.deleteUser(authData.user.id)
-    return NextResponse.json({ error: privateError.message }, { status: 500 })
+    return serverError('members.privateUpsert', privateError)
   }
 
   return NextResponse.json({ success: true, id: authData.user.id })
