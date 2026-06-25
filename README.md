@@ -1,17 +1,23 @@
 # DOTCOM — DOTA Companion
 
-**DOTCOM** (short for *DOTA Companion*) is a mobile-first web app for tracking bus attendance during the ACES DOTA REBOOT 2026 college trip. Admins can manage the member roster, toggle on/off-bus status, and scan QR codes. Members get a personal QR code page to show the committee.
+**DOTCOM** (short for *DOTA Companion*) is a mobile-first web app for the ACES DOTA REBOOT 2026 college trip. It started as a bus-attendance tracker and grew into the trip's companion: seating, rooms, groups, a live map, and committee map pins. Members get a personal QR code page; admins and committee run everything from a dashboard.
 
 ---
 
 ## Features
 
-- **Admin dashboard** — live off-bus counter, searchable member table with real-time updates via Supabase Realtime
+- **Admin dashboard** — live off-bus counter, searchable/filterable member table, exports (CSV/Excel), real-time updates via Supabase Realtime
 - **QR scan** — admin opens camera, scans a member's QR code, status flips instantly with haptic feedback
-- **Member page** — each member sees their name, current status, and personal QR code
+- **Travel modes** — not everyone rides the bus: **Bus passenger** (default), **Setup Crew** (goes ahead to prep the villa), or **Convoy** (own vehicle). Setup Crew / Convoy are excluded from on/off-bus counts, scanning, and seating, but keep every other feature
+- **Bus seating** — visual seat map for two buses; tap a seat to assign/move members; reclassify travel mode inline
+- **Rooms & groups** — assign members to villa rooms and trip groups
+- **Live map** — opt-in location sharing, plus committee-placed map pins (paste a Google Maps link) and driving directions
+- **Member page** — each member sees their name, status/travel badge, personal QR code, location toggle, and committee contacts
+- **Roles** — `admin`, `committee` (admin-level data access, can't assign roles), `member`
 - **Bulk import** — POST a JSON array to `/api/admin/import` to create many members at once
 - **Audit log** — every status change is recorded in `status_logs`
 - **PWA-ready** — installable on Android/iOS via `manifest.json`
+- **Hardened** — Zod-validated request bodies, rate limiting, login CAPTCHA, CSP headers, sanitized errors, PII isolated in `member_private` (see [Security](#security))
 
 ---
 
@@ -48,11 +54,10 @@ npm install
 Open the Supabase **SQL Editor** and paste the contents of `supabase/schema.sql`, then run it.
 
 This creates:
-- `profiles` table (linked to `auth.users`)
-- `status_logs` table
-- `is_admin()` security-definer function
-- RLS policies for admin and member access
-- Realtime enabled on `profiles`
+- `rooms`, `profiles` (linked to `auth.users`), `member_private` (PII), `groups`, `status_logs`, and `map_markers` tables
+- `is_admin()` security-definer function (true for `admin` and `committee`)
+- RLS policies for admin/committee and member access
+- Realtime enabled on `profiles`, `rooms`, `groups`, and `map_markers`
 
 ### 4. Create your `.env.local`
 
@@ -103,8 +108,8 @@ Open [http://localhost:3000](http://localhost:3000). Log in with your admin acco
 ```json
 {
   "members": [
-    { "email": "budi@umn.ac.id", "password": "secret123", "full_name": "Budi Santoso", "student_id": "00000012345", "group_label": "Bus A" },
-    { "email": "ani@umn.ac.id",  "password": "secret456", "full_name": "Ani Rahayu",   "student_id": "00000067890", "group_label": "Bus B" }
+    { "email": "john.doe@umn.ac.id", "password": "secret123", "full_name": "John Doe", "student_id": "00000012345", "group_label": "Bus A" },
+    { "email": "jane.doe@umn.ac.id", "password": "secret456", "full_name": "Jane Doe", "student_id": "00000067890", "group_label": "Bus B", "travel_mode": "convoy" }
   ]
 }
 ```
@@ -130,28 +135,29 @@ For the PWA icons (`/public/icon-192.png` and `/public/icon-512.png`), add your 
 
 ```
 app/
-  api/admin/
-    toggle/[id]/   POST — flip member status
-    scan/          POST — lookup by qr_token + toggle
-    reset-all/     POST — set all members back to on_bus
-    members/       POST — create single member
-    members/[id]/  PATCH / DELETE — edit or remove member
-    import/        POST — bulk create members
-  auth/callback/   Supabase auth redirect handler
-  dashboard/       Admin pages (overview, scan, member detail)
-  login/           Login page
-  me/              Member QR page
-components/
-  OffBusCounter    Live counter with realtime subscription
-  MemberTable      Searchable table with toggle buttons
-  QrDisplay        Member's personal QR code
-  QrScanner        Camera-based QR scanner
-  MemberForm       Create / edit member form
-  StatusBadge      On bus / Off bus pill
-lib/supabase/
-  client.ts        Browser Supabase client
-  server.ts        Server Supabase client (with cookie handling)
-  admin.ts         Service role client (server-only)
+  api/
+    admin/         Admin/committee routes — protected by requireAdmin():
+      toggle/[id]/   flip member status      scan/          QR lookup + toggle
+      reset-all/     reset to on_bus         members[/[id]] create / edit / delete / role
+      import/        bulk create             seats/         assign / unassign seat
+      rooms[/...]    room CRUD + assign      groups/        group create / reassign / rename / delete
+      markers[/...]  map-pin CRUD            maps-resolve/  resolve a Google Maps link
+    location/      member: update location / toggle sharing
+    route/         member: driving directions (OpenRouteService)
+  auth/            callback + password reset
+  dashboard/       admin: overview, scan, member detail, add / import
+  buses/           bus seat map
+  rooms/ groups/   room & group views
+  map/             live location map + pins
+  login/  me/      login · member home (status, QR, location, contacts)
+components/        DataTable, OffBusCounter, QrScanner, QrDisplay, MemberForm, MemberImport,
+                   BusesView, BusMap, RoomsView, GroupsView, LiveMap, LocationToggle, StatusBadge,
+                   ParticipantBadge, LiveStatusBadge, … (UI for the features above)
+lib/
+  supabase/        client.ts · server.ts (cookies) · admin.ts (service role) · with-private.ts (PII merge)
+  schemas.ts       Zod request-body schemas (one per route)
+  api.ts           parseBody / serverError / enforceLimit helpers
+  ratelimit.ts     Upstash rate limiter        utils.ts  shared helpers (travel modes, etc.)
 supabase/
   schema.sql       Full DB schema — run this first
 ```

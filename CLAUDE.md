@@ -4,9 +4,13 @@ Context for AI assistants working on this codebase.
 
 ## What this app does
 
-Mobile-first bus attendance tracker for a UMN college trip. Two roles:
-- **Admin** — manage roster, toggle on/off-bus status, scan QR codes
-- **Member** — log in, see own status and personal QR code
+Mobile-first companion app for a UMN college trip. Beyond bus attendance it covers
+bus seating, rooms, groups, a live location map, and committee-placed map pins. Roles:
+- **Admin** — full access: roster, on/off-bus toggle + QR scan, seats, rooms, groups, map pins, role assignment
+- **Committee** — same data access as admin (cannot assign roles); also has their own trip data
+- **Member** — log in, see own status and personal QR code, share location, browse seats/rooms/groups/map
+
+Not everyone rides the bus — see **travel modes** below.
 
 ## Stack
 
@@ -31,24 +35,35 @@ Mobile-first bus attendance tracker for a UMN college trip. Two roles:
 - **Client Components** use `createClient()` from `lib/supabase/client.ts`
 - **API Route Handlers** use `lib/supabase/server.ts` for auth checks and `lib/supabase/admin.ts` for privileged operations (creating/deleting auth users)
 - **Status model**: `on_bus` (default) / `off_bus`. Every toggle writes a row to `status_logs`
+- **Travel modes**: `profiles.travel_mode` is `bus` (default) / `advance` (Setup Crew) / `convoy` (own vehicle). Only `bus` travelers are tracked on/off the bus — they're the only ones counted by `OffBusCounter`, scannable (`/api/admin/scan`), toggleable, and seatable. `advance`/`convoy` keep every other feature (location, rooms, groups, map). Gate this with `isBusTraveler()` from `lib/utils.ts`; render the right pill with `ParticipantBadge`. Switching someone off `bus` vacates their seat
 - **QR tokens**: `qr_token` is a UUID in `member_private` (NOT `profiles`). The scanner POSTs this token to `/api/admin/scan` which does the lookup and toggle
 - **PII split**: `student_id`, `phone`, `qr_token` live in `member_private` (own-row/admin RLS), kept out of the broadly-readable `profiles`. Merge them into profile rows with `mergePrivate()` from `lib/supabase/with-private.ts`
-- **Realtime**: `OffBusCounter` and `MemberTable` subscribe to `postgres_changes` on the `profiles` table
+- **Realtime**: `DashboardClient` (dashboard) and `BusesView` (seat map) subscribe to `postgres_changes` on `profiles`; UIs also update optimistically so they don't depend on realtime landing
 
 ## Database schema
 
 See `supabase/schema.sql` for the full schema. Key tables:
 
 ```
-rooms        id, name, floor, notes, capacity, created_at
-             (must be created BEFORE profiles because profiles FK into it)
+rooms          id, name, floor, notes, capacity, created_at
+               (must be created BEFORE profiles because profiles FK into it)
 
-profiles     id (FK auth.users), full_name, role, student_id, phone, group_label,
-             qr_token (unique UUID), status, bus_number, seat_number,
-             room_id (FK rooms.id), latitude, longitude, location_sharing,
-             location_updated_at, last_changed_at
+profiles       id (FK auth.users), full_name, role, photo_url, group_label,
+               status, travel_mode, bus_number, seat_number, room_id (FK rooms.id),
+               latitude, longitude, location_sharing, location_updated_at,
+               last_changed_at, created_at
+               (NO PII here — see member_private)
 
-status_logs  id, member_id, action ('out'|'in'), changed_by, created_at
+member_private id (FK profiles), student_id, phone, qr_token (unique UUID)
+               (own-row/admin RLS; PII + the scan credential live here, not in profiles)
+
+groups         id, name (unique), created_at
+               (registry so empty groups persist; membership is profiles.group_label text)
+
+status_logs    id, member_id, action ('out'|'in'), changed_by, created_at
+
+map_markers    id, label, icon, latitude, longitude, visibility ('public'|'private'),
+               source_url, created_by, created_at
 ```
 
 RLS highlights:
@@ -60,22 +75,29 @@ RLS highlights:
 
 ## API routes
 
-All under `app/api/admin/` — protected by `requireAdmin()` (auth + role check).
+Everything under `app/api/admin/` is protected by `requireAdmin()` (admin **or** committee).
+`/api/location` and `/api/route` are member-accessible (auth only). Role assignment is
+additionally gated by `requireSuperAdmin()` (true admin only).
 
 | Route | Method | What it does |
 |---|---|---|
-| `/api/admin/toggle/[id]` | POST | Flip member status + write log |
-| `/api/admin/scan` | POST | Lookup by `qr_token`, flip status + write log |
-| `/api/admin/reset-all` | POST | Set all members to `on_bus` |
+| `/api/admin/toggle/[id]` | POST | Flip member status + write log (bus travelers only) |
+| `/api/admin/scan` | POST | Lookup by `qr_token`, flip status + write log (rate-limited; bus travelers only) |
+| `/api/admin/reset-all` | POST | Set all bus travelers to `on_bus` |
 | `/api/admin/members` | POST | Create auth user + profile (service role) |
 | `/api/admin/members/[id]` | PATCH / DELETE | Edit profile / delete auth user |
+| `/api/admin/members/[id]/role` | PATCH | Assign role (super-admin only) |
 | `/api/admin/import` | POST | Bulk create members from JSON array |
 | `/api/admin/seats` | POST / DELETE | Assign / unassign bus seat |
 | `/api/admin/rooms` | GET / POST | List rooms / create room |
 | `/api/admin/rooms/[id]` | PATCH / DELETE | Edit / delete room |
 | `/api/admin/rooms/assign` | POST | Assign member to room (`roomId: null` to unassign) |
-| `/api/admin/groups` | PATCH | Update a member's `group_label` |
-| `/api/location` | POST / PATCH | Update own location / toggle sharing |
+| `/api/admin/groups` | POST / PATCH / PUT / DELETE | Create / reassign member / rename / delete group |
+| `/api/admin/markers` | POST | Create a map pin |
+| `/api/admin/markers/[id]` | PATCH / DELETE | Edit / delete a map pin |
+| `/api/admin/maps-resolve` | POST | Resolve a pasted Google Maps link to lat/lng (SSRF-guarded) |
+| `/api/location` | POST / PATCH | Update own location / toggle sharing (rate-limited) |
+| `/api/route` | POST | Driving directions via OpenRouteService (rate-limited) |
 
 ## Environment variables
 
