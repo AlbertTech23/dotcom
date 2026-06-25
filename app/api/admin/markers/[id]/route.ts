@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/supabase/require-admin'
+import { isSafeHttpUrl } from '@/lib/utils'
 
 // PATCH /api/admin/markers/[id] — edit a marker's label/icon/visibility/position.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -16,7 +17,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.visibility === 'public' || body.visibility === 'private') patch.visibility = body.visibility
   if (typeof body.latitude === 'number') patch.latitude = body.latitude
   if (typeof body.longitude === 'number') patch.longitude = body.longitude
-  if (typeof body.source_url === 'string') patch.source_url = body.source_url.trim() || null
+  if (typeof body.source_url === 'string') {
+    const trimmed = body.source_url.trim()
+    if (trimmed && !isSafeHttpUrl(trimmed)) {
+      return NextResponse.json({ error: 'source_url must be a valid http(s) link' }, { status: 400 })
+    }
+    patch.source_url = trimmed || null
+  }
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
   }
