@@ -21,9 +21,12 @@ const COLUMNS = [
   { key: 'phone',       label: 'phone',       required: false, aliases: ['phone', 'hp', 'no_hp', 'telepon', 'whatsapp', 'wa'] },
   { key: 'group_label', label: 'group_label', required: false, aliases: ['group_label', 'group', 'kelompok', 'grup'] },
   { key: 'role',        label: 'role',        required: false, aliases: ['role', 'peran'] },
+  { key: 'travel_mode', label: 'travel_mode', required: false, aliases: ['travel_mode', 'travel', 'mode', 'transport'] },
 ] as const
 
 type Key = (typeof COLUMNS)[number]['key']
+
+const TRAVEL_MODES = ['bus', 'advance', 'convoy'] as const
 
 interface ParsedRow {
   rowNumber: number               // 1-based row in the sheet (for error messages)
@@ -33,6 +36,7 @@ interface ParsedRow {
   phone: string
   group_label: string
   role: string
+  travel_mode: string
   errors: string[]
 }
 
@@ -68,9 +72,9 @@ export function MemberImport({ canAssignRole }: Props) {
 
     // ── Sheet 1: the roster (header + one example row to copy) ──
     const header = COLUMNS.map(c => c.label)
-    const example = ['john.doe@students.umn.ac.id', 'John Doe', '00000012345', '08123456789', 'Alpha', 'member']
+    const example = ['john.doe@students.umn.ac.id', 'John Doe', '00000012345', '08123456789', 'Alpha', 'member', 'bus']
     const ws = XLSX.utils.aoa_to_sheet([header, example])
-    ws['!cols'] = [{ wch: 28 }, { wch: 22 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 12 }]
+    ws['!cols'] = [{ wch: 28 }, { wch: 22 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 14 }]
     ws['!autofilter'] = { ref: `A1:${XLSX.utils.encode_col(COLUMNS.length - 1)}1` }
 
     // Header row: required = solid blue + white, optional = light slate + dark.
@@ -104,6 +108,7 @@ export function MemberImport({ canAssignRole }: Props) {
       ['phone', 'optional', 'Phone / WhatsApp number. Leave blank if unknown.'],
       ['group_label', 'optional', 'Group / cluster name. Leave blank for no group.'],
       ['role', 'optional', 'Leave blank or "member" for normal members. "committee" grants staff access (admin-only).'],
+      ['travel_mode', 'optional', 'Leave blank or "bus" for bus passengers. "advance" = Setup Crew, "convoy" = own vehicle. Non-bus people aren’t counted, scanned, or seated.'],
     ]
     const wsGuide = XLSX.utils.aoa_to_sheet(guide)
     wsGuide['!cols'] = [{ wch: 16 }, { wch: 12 }, { wch: 80 }]
@@ -185,6 +190,7 @@ export function MemberImport({ canAssignRole }: Props) {
         .filter(r => r.some(c => String(c ?? '').trim() !== ''))
         .map((r, idx) => {
           const role = cell(r, 'role').toLowerCase()
+          const travel = cell(r, 'travel_mode').toLowerCase()
           const row: ParsedRow = {
             rowNumber: idx + 2, // +2: 1-based, and row 1 is the header
             email: cell(r, 'email').toLowerCase(),
@@ -193,6 +199,7 @@ export function MemberImport({ canAssignRole }: Props) {
             phone: cell(r, 'phone'),
             group_label: cell(r, 'group_label'),
             role: role || 'member',
+            travel_mode: travel || 'bus',
             errors: [],
           }
 
@@ -210,6 +217,10 @@ export function MemberImport({ canAssignRole }: Props) {
             row.errors.push(`unknown role "${row.role}" — use "member" or "committee"`)
           } else if (row.role === 'committee' && !canAssignRole) {
             row.errors.push('only an admin can import committee accounts')
+          }
+
+          if (!(TRAVEL_MODES as readonly string[]).includes(row.travel_mode)) {
+            row.errors.push(`unknown travel_mode "${row.travel_mode}" — use bus, advance, or convoy`)
           }
 
           return row
@@ -239,6 +250,7 @@ export function MemberImport({ canAssignRole }: Props) {
         phone: r.phone || undefined,
         group_label: r.group_label || undefined,
         role: r.role,
+        travel_mode: r.travel_mode,
       }))
 
       const res = await fetch('/api/admin/import', {
@@ -277,8 +289,8 @@ export function MemberImport({ canAssignRole }: Props) {
             <h2 className="text-sm font-semibold text-slate-900 dark:text-white">1 · Download the template</h2>
             <p className="text-xs text-slate-500 mt-0.5">
               <strong>email</strong>, <strong>full_name</strong> and <strong>student_id</strong> (NIM) are required.
-              The NIM becomes each member’s initial password. <strong>phone</strong>, <strong>group_label</strong> and{' '}
-              <strong>role</strong> are optional.
+              The NIM becomes each member’s initial password. <strong>phone</strong>, <strong>group_label</strong>,{' '}
+              <strong>role</strong> and <strong>travel_mode</strong> (bus / advance / convoy) are optional.
             </p>
           </div>
         </div>
@@ -339,6 +351,7 @@ export function MemberImport({ canAssignRole }: Props) {
                   <th className="px-2 py-1.5 font-medium">NIM</th>
                   <th className="px-2 py-1.5 font-medium">Group</th>
                   <th className="px-2 py-1.5 font-medium">Role</th>
+                  <th className="px-2 py-1.5 font-medium">Travel</th>
                   <th className="px-2 py-1.5 font-medium">Status</th>
                 </tr>
               </thead>
@@ -353,6 +366,7 @@ export function MemberImport({ canAssignRole }: Props) {
                       <td className="px-2 py-1.5 text-slate-700 dark:text-slate-300">{r.student_id || <span className="text-slate-400">—</span>}</td>
                       <td className="px-2 py-1.5 text-slate-700 dark:text-slate-300">{r.group_label || <span className="text-slate-400">—</span>}</td>
                       <td className="px-2 py-1.5 text-slate-700 dark:text-slate-300">{r.role}</td>
+                      <td className="px-2 py-1.5 text-slate-700 dark:text-slate-300">{r.travel_mode}</td>
                       <td className="px-2 py-1.5">
                         {ok ? (
                           <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
