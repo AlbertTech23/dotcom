@@ -2,7 +2,7 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { ADMIN_VIEW_COOKIE } from '@/lib/admin-view'
+import { ADMIN_VIEW_COOKIE, signedAdminViewValue } from '@/lib/admin-view'
 import type { Profile } from '@/types/database'
 
 export interface AdminViewState { error: string }
@@ -31,7 +31,7 @@ export async function enterAdminView(
   if (code !== expected) return { error: 'Incorrect code. Please try again.' }
 
   const store = await cookies()
-  store.set(ADMIN_VIEW_COOKIE, '1', {
+  store.set(ADMIN_VIEW_COOKIE, await signedAdminViewValue(), {
     httpOnly: true,
     sameSite: 'lax',
     path: '/',

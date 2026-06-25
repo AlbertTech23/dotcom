@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { ADMIN_VIEW_COOKIE, isValidAdminViewCookie } from '@/lib/admin-view'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request })
@@ -56,9 +57,9 @@ export async function middleware(request: NextRequest) {
   const role = profile?.role ?? 'member'
   const isPrivileged = role === 'admin' || role === 'committee'
   // Committee default to the personal view; the dashboard is unlocked per-session
-  // via the admin-view code (sets this cookie). Read it directly here — next/headers
-  // cookies() isn't available in middleware.
-  const adminView = request.cookies.get('admin_view')?.value === '1'
+  // via the admin-view code (sets a SIGNED cookie). Verify the signature here so a
+  // forged `admin_view=<anything>` can't grant the view.
+  const adminView = await isValidAdminViewCookie(request.cookies.get(ADMIN_VIEW_COOKIE)?.value)
 
   // Shared routes — accessible to all authenticated users
   if (
