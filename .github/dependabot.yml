@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # npm dependencies — weekly sweep + immediate PRs for security advisories.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      # Bundle routine non-security bumps into one PR to cut noise; security
+      # updates still come through as their own PRs immediately.
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    # xlsx is pinned to the SheetJS CDN tarball (not the vulnerable npm package);
+    # Dependabot can't resolve CDN URLs, so don't let it try to "update" it.
+    ignore:
+      - dependency-name: "xlsx"
+
+  # Keep GitHub Actions used in workflows patched too.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
