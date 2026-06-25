@@ -57,10 +57,20 @@ This creates:
 ### 4. Create your `.env.local`
 
 ```env
+# Required
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Optional features (app still runs without these)
+ORS_API_KEY=your-openrouteservice-key          # map directions (/api/route)
+ADMIN_VIEW_CODE=the-code-committee-type         # unlocks dashboard view for committee
+UPSTASH_REDIS_REST_URL=https://...upstash.io    # API rate limiting (fails open if unset)
+UPSTASH_REDIS_REST_TOKEN=your-upstash-token
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=your-site-key     # login CAPTCHA (skipped if unset)
 ```
+
+> **CAPTCHA note:** the Turnstile **site** key goes here; the **secret** key goes in Supabase → Authentication → Attack Protection. Set both together (and the site key in Vercel) or logins will fail.
 
 ### 5. Create the first admin account
 
@@ -107,8 +117,10 @@ Response includes per-row success/failure so you can see which ones failed.
 
 1. Push to GitHub
 2. Import the repo in [vercel.com](https://vercel.com)
-3. Add the three env vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) in **Project Settings → Environment Variables**
+3. Add the env vars in **Project Settings → Environment Variables** (the three required ones, plus any optional features you use — see the table below)
 4. Deploy — Vercel auto-detects Next.js
+
+> If you enable the login CAPTCHA, also set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` here **and redeploy before** turning CAPTCHA on in Supabase — otherwise the live app sends no token and every login fails.
 
 For the PWA icons (`/public/icon-192.png` and `/public/icon-512.png`), add your own images before deploying so the install prompt works correctly.
 
@@ -148,10 +160,29 @@ supabase/
 
 ## Environment variables reference
 
-| Variable | Where to find it |
-|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Settings → API → Project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API → anon public |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API → service_role secret |
+| Variable | Required | Where to find it |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Supabase → Settings → API → Project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ | Supabase → Settings → API → anon public |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Supabase → Settings → API → service_role secret |
+| `ORS_API_KEY` | optional | openrouteservice.org → dashboard (map directions) |
+| `ADMIN_VIEW_CODE` | optional | you choose it (code committee type to unlock the dashboard) |
+| `ADMIN_VIEW_SECRET` | optional | any random string; HMAC key for the admin_view cookie (falls back to the service role key) |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | optional | upstash.com → your Redis DB (API rate limiting) |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | optional | Cloudflare → Turnstile → your widget (login CAPTCHA site key) |
 
 > **Never commit `.env.local` to git.** The service role key bypasses all RLS — keep it server-side only.
+
+---
+
+## Security
+
+This app went through a hardening pass. Notable measures, in case you extend it:
+
+- **Input validation** — every API route validates its body with Zod (`lib/schemas.ts`) via `parseBody()`; unknown fields are stripped (no mass-assignment).
+- **Rate limiting** — costly routes (`/api/route`, `/api/location`, `/api/admin/scan`) are per-user rate-limited via Upstash (`lib/ratelimit.ts`); fails open if Upstash isn't configured.
+- **CAPTCHA** — login is protected by Cloudflare Turnstile when configured (site key + Supabase Auth secret).
+- **Security headers** — CSP (report-only), HSTS, X-Frame-Options, etc. in `next.config.ts`. Add new external origins to the CSP allowlist.
+- **Sanitized errors** — routes never leak raw DB errors; `serverError()` logs server-side and returns a generic message.
+- **PII isolation** — `student_id` / `phone` / `qr_token` live in `member_private` (own-row/admin RLS), not in the broadly-readable `profiles`.
+- **Dependencies** — `xlsx` is pinned to the patched SheetJS CDN build (do **not** `npm install xlsx`); a CI workflow runs `npm audit` and Dependabot watches for advisories.

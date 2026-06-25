@@ -17,7 +17,7 @@ Mobile-first bus attendance tracker for a UMN college trip. Two roles:
 
 ## Auth and roles
 
-- Roles are stored in `public.profiles.role` (`'admin'` | `'member'`)
+- Roles are stored in `public.profiles.role` (`'admin'` | `'committee'` | `'member'`). `committee` has the same data access as `admin` (see `is_admin()`); the only thing `committee` can't do is assign roles (`requireSuperAdmin` gates that)
 - `is_admin()` is a SECURITY DEFINER SQL function — use it in RLS policies to avoid recursion
 - `lib/supabase/admin.ts` uses the service role key — **never import this in Client Components or expose it to the browser**
 - Middleware (`middleware.ts`) handles route protection:
@@ -31,7 +31,8 @@ Mobile-first bus attendance tracker for a UMN college trip. Two roles:
 - **Client Components** use `createClient()` from `lib/supabase/client.ts`
 - **API Route Handlers** use `lib/supabase/server.ts` for auth checks and `lib/supabase/admin.ts` for privileged operations (creating/deleting auth users)
 - **Status model**: `on_bus` (default) / `off_bus`. Every toggle writes a row to `status_logs`
-- **QR tokens**: `qr_token` is a UUID in `profiles` — it carries no PII. The scanner POSTs this token to `/api/admin/scan` which does the lookup and toggle
+- **QR tokens**: `qr_token` is a UUID in `member_private` (NOT `profiles`). The scanner POSTs this token to `/api/admin/scan` which does the lookup and toggle
+- **PII split**: `student_id`, `phone`, `qr_token` live in `member_private` (own-row/admin RLS), kept out of the broadly-readable `profiles`. Merge them into profile rows with `mergePrivate()` from `lib/supabase/with-private.ts`
 - **Realtime**: `OffBusCounter` and `MemberTable` subscribe to `postgres_changes` on the `profiles` table
 
 ## Database schema
@@ -81,8 +82,26 @@ All under `app/api/admin/` — protected by `requireAdmin()` (auth + role check)
 ```
 NEXT_PUBLIC_SUPABASE_URL        — public, safe for browser
 NEXT_PUBLIC_SUPABASE_ANON_KEY   — public, safe for browser
-SUPABASE_SERVICE_ROLE_KEY       — secret, server-only
+SUPABASE_SERVICE_ROLE_KEY       — secret, server-only (bypasses RLS)
+ORS_API_KEY                     — secret, server-only (OpenRouteService, used by /api/route)
+ADMIN_VIEW_CODE                 — secret, the code committee enter to unlock the dashboard view
+ADMIN_VIEW_SECRET               — optional; HMAC key for the admin_view cookie (falls back to SERVICE_ROLE_KEY)
+UPSTASH_REDIS_REST_URL          — rate limiting; if unset, limiter fails open (allows all)
+UPSTASH_REDIS_REST_TOKEN        — rate limiting
+NEXT_PUBLIC_TURNSTILE_SITE_KEY  — public; login CAPTCHA. If unset, CAPTCHA is skipped
 ```
+
+> The Turnstile **secret** key is NOT an app env var — it's pasted into Supabase → Auth → Attack Protection. Enable Supabase CAPTCHA and set this site key together, or logins break.
+
+## Security conventions (hardening pass — keep these intact)
+
+- **Validate every request body with Zod.** Schemas live in `lib/schemas.ts`; parse via `parseBody(req, schema)` from `lib/api.ts` (returns `{ data }` or `{ res }`). This also strips unknown keys → prevents mass-assignment (e.g. a member can't smuggle `role`/`status`).
+- **Never return raw DB errors.** Use `serverError(context, err)` from `lib/api.ts` for unexpected failures — it logs server-side and returns a generic message. Don't `return NextResponse.json({ error: err.message })`.
+- **Rate-limit costly routes** with `enforceLimit(name, userId)` from `lib/api.ts` (Upstash-backed, `lib/ratelimit.ts`). Currently on `/api/route`, `/api/location`, `/api/admin/scan`.
+- **`admin_view` cookie is HMAC-signed** (`lib/admin-view.ts`) — never revert it to a plain `'1'` value; middleware verifies the signature.
+- **`xlsx` is pinned to the SheetJS CDN tarball** in `package.json` (the npm registry version has unpatched CVEs). Do NOT `npm install xlsx` to "fix" it — that reintroduces the vulnerable package. Dependabot ignores it.
+- **Security headers + CSP** are in `next.config.ts` (CSP is currently `Report-Only`). When you add an external script/style/connect/frame origin, add it to the CSP allowlist too.
+- **Role assignment is admin-only** via `requireSuperAdmin` — `'admin'` can never be granted through the API (only `member`/`committee`).
 
 ## Things to be careful about
 
