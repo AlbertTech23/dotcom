@@ -2,7 +2,7 @@
 import { useState, type Dispatch, type SetStateAction } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { toWaNumber } from '@/lib/utils'
+import { toWaNumber, isBusTraveler } from '@/lib/utils'
 import type { Profile } from '@/types/database'
 import { RotateCcw, ChevronRight } from 'lucide-react'
 
@@ -25,15 +25,18 @@ export function OffBusCounter({
   const [resetting, setResetting] = useState(false)
   const router = useRouter()
 
-  const offBus = profiles.filter(p => p.status === 'off_bus' && p.role !== 'admin')
-  const total  = profiles.filter(p => p.role !== 'admin').length
+  // Only bus travelers can be "off the bus" — Setup Crew / Convoy travel separately,
+  // so they're excluded from both the count and the denominator.
+  const busMembers = profiles.filter(p => p.role !== 'admin' && isBusTraveler(p.travel_mode))
+  const offBus = busMembers.filter(p => p.status === 'off_bus')
+  const total  = busMembers.length
 
   async function resetAll() {
     setResetting(true)
     const res = await fetch('/api/admin/reset-all', { method: 'POST' })
     setResetting(false)
     if (res.ok) {
-      setProfiles(prev => prev.map(p => p.role !== 'admin' ? { ...p, status: 'on_bus' } : p))
+      setProfiles(prev => prev.map(p => p.role !== 'admin' && isBusTraveler(p.travel_mode) ? { ...p, status: 'on_bus' } : p))
       toast.success('All marked on bus')
     } else toast.error('Failed to reset')
   }

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { isBusTraveler, TRAVEL_MODE_LABELS } from '@/lib/utils'
 import type { Profile } from '@/types/database'
 
-type ScanMember = Pick<Profile, 'id' | 'full_name' | 'status' | 'role' | 'seat_number'>
+type ScanMember = Pick<Profile, 'id' | 'full_name' | 'status' | 'role' | 'seat_number' | 'travel_mode'>
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
     // instead of a separate token lookup followed by a profile fetch.
     supabase
       .from('member_private')
-      .select('profiles!inner(id, full_name, status, role, seat_number)')
+      .select('profiles!inner(id, full_name, status, role, seat_number, travel_mode)')
       .eq('qr_token', qr_token)
       .single(),
   ])
@@ -36,6 +37,14 @@ export async function POST(req: NextRequest) {
   const member = (lookupRes.data as { profiles: ScanMember } | null)?.profiles ?? null
   if (lookupRes.error || !member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
   if (member.role === 'admin') return NextResponse.json({ error: 'Cannot scan admin QR' }, { status: 400 })
+  // Setup Crew / Convoy don't ride the bus — there's nothing to board, so don't
+  // flip a status for them (and keep them out of the on/off-bus tally).
+  if (!isBusTraveler(member.travel_mode)) {
+    return NextResponse.json(
+      { error: `${member.full_name} isn't a bus passenger (${TRAVEL_MODE_LABELS[member.travel_mode]}) — no scan needed.` },
+      { status: 400 },
+    )
+  }
   // Require a seat before marking on/off (avoids status rows for members with no
   // seat — see the manual toggle route for the same gate).
   if (member.seat_number == null) {

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/supabase/require-admin'
+import { isBusTraveler, TRAVEL_MODE_LABELS } from '@/lib/utils'
+import type { TravelMode } from '@/types/database'
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -13,11 +15,19 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const { data: profile, error } = await supabase
     .from('profiles')
-    .select('status, full_name, seat_number')
+    .select('status, full_name, seat_number, travel_mode')
     .eq('id', id)
-    .single()
+    .single() as { data: { status: string; full_name: string; seat_number: number | null; travel_mode: TravelMode } | null; error: unknown }
 
   if (error || !profile) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+
+  // Setup Crew / Convoy don't ride the bus, so there's no on/off status to flip.
+  if (!isBusTraveler(profile.travel_mode)) {
+    return NextResponse.json(
+      { error: `${profile.full_name} isn't a bus passenger (${TRAVEL_MODE_LABELS[profile.travel_mode]}).` },
+      { status: 400 },
+    )
+  }
 
   // Can't board a bus they have no seat on — require a seat first, otherwise the
   // roster accrues "on/off bus" rows for people with no seat (data debt).

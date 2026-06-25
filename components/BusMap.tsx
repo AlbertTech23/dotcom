@@ -2,6 +2,7 @@
 import { useState, type Dispatch, type SetStateAction } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
+import { isBusTraveler } from '@/lib/utils'
 import type { Profile } from '@/types/database'
 import { X, CheckCircle2, LogOut as LogOutIcon, Plus } from 'lucide-react'
 
@@ -120,13 +121,14 @@ export function BusMap({ profiles, setProfiles, busNumber, isAdmin, mySeatNumber
   // they were nominally pencilled into. Gating on bus_number used to hide members
   // pre-assigned to the *other* bus but never seated, making them unassignable
   // here (they also don't show under "Move from another seat" — no seat to move).
+  // Only bus travelers are seatable — Setup Crew / Convoy don't board.
   const allUnassigned = profiles.filter(p =>
-    p.role !== 'admin' && p.seat_number === null
+    p.role !== 'admin' && isBusTraveler(p.travel_mode) && p.seat_number === null
   )
   // Already-seated participants — offered so an admin can MOVE someone into the
   // selected seat (the seats API vacates their previous seat automatically).
   const seated = profiles.filter(p =>
-    p.role !== 'admin' && p.seat_number !== null && !(p.bus_number === busNumber && p.seat_number === selected)
+    p.role !== 'admin' && isBusTraveler(p.travel_mode) && p.seat_number !== null && !(p.bus_number === busNumber && p.seat_number === selected)
   )
   const busLabel = (n: number | null) => (n === 1 ? 'A' : n === 2 ? 'B' : '?')
 
