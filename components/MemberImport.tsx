@@ -68,7 +68,7 @@ export function MemberImport({ canAssignRole }: Props) {
 
     // ── Sheet 1: the roster (header + one example row to copy) ──
     const header = COLUMNS.map(c => c.label)
-    const example = ['budi@students.umn.ac.id', 'Budi Santoso', '00000012345', '08123456789', 'Alpha', 'member']
+    const example = ['john.doe@students.umn.ac.id', 'John Doe', '00000012345', '08123456789', 'Alpha', 'member']
     const ws = XLSX.utils.aoa_to_sheet([header, example])
     ws['!cols'] = [{ wch: 28 }, { wch: 22 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 12 }]
     ws['!autofilter'] = { ref: `A1:${XLSX.utils.encode_col(COLUMNS.length - 1)}1` }
@@ -99,7 +99,7 @@ export function MemberImport({ canAssignRole }: Props) {
       [''],
       ['Column', 'Required?', 'What to put'],
       ['email', 'REQUIRED', 'Login email. Must be unique — duplicates are skipped.'],
-      ['full_name', 'REQUIRED', 'Display name, e.g. Budi Santoso.'],
+      ['full_name', 'REQUIRED', 'Display name, e.g. John Doe.'],
       ['student_id', 'REQUIRED', 'NIM. Also becomes the initial password — the member signs in with their NIM and can change it later.'],
       ['phone', 'optional', 'Phone / WhatsApp number. Leave blank if unknown.'],
       ['group_label', 'optional', 'Group / cluster name. Leave blank for no group.'],

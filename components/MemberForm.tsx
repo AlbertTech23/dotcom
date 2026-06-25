@@ -189,7 +189,7 @@ export function MemberForm({ mode, profile, rooms, groups, canAssignRole = false
       <div>
         <label className={labelClass}>Full Name *</label>
         <input type="text" required className={inputClass}
-          value={form.full_name} onChange={e => update('full_name', e.target.value)} placeholder="Budi Santoso" />
+          value={form.full_name} onChange={e => update('full_name', e.target.value)} placeholder="John Doe" />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
