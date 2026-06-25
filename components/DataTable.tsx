@@ -16,8 +16,8 @@ import {
   type Row,
 } from '@tanstack/react-table'
 import { toast } from 'sonner'
-import { StatusBadge } from './StatusBadge'
-import { formatTime } from '@/lib/utils'
+import { ParticipantBadge } from './ParticipantBadge'
+import { formatTime, isBusTraveler, TRAVEL_MODE_LABELS } from '@/lib/utils'
 import type { Profile } from '@/types/database'
 import {
   ChevronUp,
@@ -50,7 +50,9 @@ function toExportRow(p: Profile) {
     NIM:         p.student_id ?? '',
     Role:        p.role === 'committee' ? 'Committee' : p.role === 'admin' ? 'Admin' : 'Member',
     Group:       p.group_label ?? '',
-    Status:      p.status === 'on_bus' ? 'On Bus' : 'Off Bus',
+    Status:      isBusTraveler(p.travel_mode)
+                   ? (p.status === 'on_bus' ? 'On Bus' : 'Off Bus')
+                   : TRAVEL_MODE_LABELS[p.travel_mode],
     Bus:         p.bus_number ? `Bus ${p.bus_number}` : '',
     Seat:        p.seat_number ?? '',
     'Last Changed': p.last_changed_at
@@ -111,7 +113,9 @@ async function exportExcel(rows: Profile[]) {
       if (cell) cell.s = { border, alignment: { vertical: 'center' } }
     })
     const sc = ws[XLSX.utils.encode_cell({ r, c: statusCol })]
-    if (sc) {
+    // Tint only the on/off-bus cells green/red. Non-bus travelers (Setup Crew /
+    // Convoy) keep the neutral body style — they aren't an on/off-bus state.
+    if (sc && (row.Status === 'On Bus' || row.Status === 'Off Bus')) {
       const onBus = row.Status === 'On Bus'
       sc.s = {
         border,
@@ -162,6 +166,7 @@ export function DataTable({
   const [busFilter,    setBusFilter]    = useState('all')
   const [groupFilter,  setGroupFilter]  = useState('all')
   const [roleFilter,   setRoleFilter]   = useState('all')
+  const [travelFilter, setTravelFilter] = useState('all')
   const [sorting, setSorting]     = useState<SortingState>([])
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 25 })
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -207,17 +212,20 @@ export function DataTable({
   // Pre-filter by dropdown filters (TanStack globalFilter handles text search on top)
   const displayData = useMemo(() => {
     let d = members
-    if (statusFilter !== 'all') d = d.filter(p => p.status === statusFilter)
+    // On/off-bus only applies to bus travelers, so picking on_bus/off_bus also
+    // drops Setup Crew / Convoy (who have no on/off state).
+    if (statusFilter !== 'all') d = d.filter(p => isBusTraveler(p.travel_mode) && p.status === statusFilter)
+    if (travelFilter !== 'all') d = d.filter(p => (p.travel_mode ?? 'bus') === travelFilter)
     if (busFilter    !== 'all') d = d.filter(p => String(p.bus_number ?? '') === busFilter)
     if (groupFilter  !== 'all') d = d.filter(p => (p.group_label ?? '') === groupFilter)
     if (roleFilter   !== 'all') d = d.filter(p => p.role === roleFilter)
     return d
-  }, [members, statusFilter, busFilter, groupFilter, roleFilter])
+  }, [members, statusFilter, travelFilter, busFilter, groupFilter, roleFilter])
 
   // Reset to page 0 when any filter/search changes
   useEffect(() => {
     setPagination(prev => ({ ...prev, pageIndex: 0 }))
-  }, [globalFilter, statusFilter, busFilter, groupFilter, roleFilter])
+  }, [globalFilter, statusFilter, travelFilter, busFilter, groupFilter, roleFilter])
 
   const columns = useMemo<ColumnDef<Profile>[]>(() => [
     {
@@ -270,7 +278,7 @@ export function DataTable({
     {
       accessorKey: 'status',
       header: ({ column }) => <SortHeader column={column} label="Status" />,
-      cell: ({ row }) => <StatusBadge status={row.original.status} />,
+      cell: ({ row }) => <ParticipantBadge status={row.original.status} travel_mode={row.original.travel_mode} />,
       enableGlobalFilter: false,
     },
     {
@@ -288,6 +296,10 @@ export function DataTable({
       cell: ({ row }) => {
         const p = row.original
         const onBus = p.status === 'on_bus'
+        // Setup Crew / Convoy don't board the bus — nothing to toggle.
+        if (!isBusTraveler(p.travel_mode)) {
+          return <span className="text-slate-300 dark:text-slate-600 text-xs">—</span>
+        }
         // No seat → can't toggle. Show a muted switch that explains itself.
         if (p.seat_number == null) {
           return (
@@ -350,6 +362,7 @@ export function DataTable({
 
   const activeFilterCount =
     (statusFilter !== 'all' ? 1 : 0) +
+    (travelFilter !== 'all' ? 1 : 0) +
     (busFilter !== 'all' ? 1 : 0) +
     (groupFilter !== 'all' ? 1 : 0) +
     (roleFilter !== 'all' ? 1 : 0)
@@ -483,6 +496,18 @@ export function DataTable({
               ))}
             </div>
 
+            {/* Travel-mode filter */}
+            <select
+              value={travelFilter}
+              onChange={e => setTravelFilter(e.target.value)}
+              className="app-select text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Travel</option>
+              <option value="bus">Bus</option>
+              <option value="advance">Setup Crew</option>
+              <option value="convoy">Convoy</option>
+            </select>
+
             {/* Bus filter */}
             <select
               value={busFilter}
@@ -508,7 +533,7 @@ export function DataTable({
 
             {activeFilterCount > 0 && (
               <button
-                onClick={() => { setStatusFilter('all'); setBusFilter('all'); setGroupFilter('all'); setRoleFilter('all') }}
+                onClick={() => { setStatusFilter('all'); setTravelFilter('all'); setBusFilter('all'); setGroupFilter('all'); setRoleFilter('all') }}
                 className="text-xs font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 px-2 py-1.5 transition"
               >
                 Clear

@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { QrDisplay } from '@/components/QrDisplay'
 import { LiveStatusBadge } from '@/components/LiveStatusBadge'
+import { TravelBadge } from '@/components/ParticipantBadge'
+import { isBusTraveler, TRAVEL_MODE_LABELS } from '@/lib/utils'
 import { LocationToggle } from '@/components/LocationToggle'
 import { ChangePassword } from '@/components/ChangePassword'
 import { ThemeToggle } from '@/components/ThemeToggle'
@@ -118,7 +120,9 @@ export default async function MePage() {
             )}
 
             <div id="onb-status" className="mt-3">
-              <LiveStatusBadge id={profile.id} initialStatus={profile.status} />
+              {isBusTraveler(profile.travel_mode)
+                ? <LiveStatusBadge id={profile.id} initialStatus={profile.status} />
+                : <TravelBadge mode={profile.travel_mode as 'advance' | 'convoy'} />}
             </div>
 
             {priv?.student_id && (
@@ -128,10 +132,19 @@ export default async function MePage() {
               </div>
             )}
 
-            {/* QR */}
+            {/* QR — only bus travelers get scanned at boarding. Setup Crew / Convoy
+                travel separately, so they see a short note instead. */}
             <div id="onb-qr" className="mt-6 w-full flex flex-col items-center border-t border-slate-100 dark:border-slate-700/60 pt-6">
-              {priv?.qr_token && <QrDisplay token={priv.qr_token} />}
-              <p className="text-slate-500 text-xs mt-3">Show this QR to the bus committee at boarding</p>
+              {isBusTraveler(profile.travel_mode) ? (
+                <>
+                  {priv?.qr_token && <QrDisplay token={priv.qr_token} />}
+                  <p className="text-slate-500 text-xs mt-3">Show this QR to the bus committee at boarding</p>
+                </>
+              ) : (
+                <p className="text-slate-500 text-xs text-center">
+                  You&apos;re travelling as <span className="font-semibold text-slate-700 dark:text-slate-300">{TRAVEL_MODE_LABELS[profile.travel_mode]}</span> — no bus check-in needed. You can still share your location and see everyone on the map.
+                </p>
+              )}
             </div>
           </div>
         </div>

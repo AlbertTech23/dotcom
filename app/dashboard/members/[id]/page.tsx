@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { MemberForm } from '@/components/MemberForm'
-import { StatusBadge } from '@/components/StatusBadge'
+import { ParticipantBadge } from '@/components/ParticipantBadge'
 import { RoleSelector } from '@/components/RoleSelector'
 import { DeleteMemberButton } from '@/components/DeleteMemberButton'
 import { formatTime, toWaNumber } from '@/lib/utils'
@@ -69,7 +69,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
           <ChevronLeft size={16} />Back
         </Link>
         <h1 className="text-xl font-bold text-slate-900 dark:text-white">{profile.full_name}</h1>
-        <StatusBadge status={profile.status} />
+        <ParticipantBadge status={profile.status} travel_mode={profile.travel_mode} />
       </div>
 
       {/* Jump straight to this member's seat on the bus map (no manual hunting).
