@@ -1,16 +1,30 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
+import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile'
 import { Logo, LogoMark } from '@/components/Logo'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { Eye, EyeOff } from 'lucide-react'
+
+// Cloudflare Turnstile. When this env var is unset (local dev / before CAPTCHA is
+// enabled in Supabase), the widget is skipped and auth works as before — flip it
+// on by setting the key here AND enabling CAPTCHA in Supabase Auth at the same time.
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState('')
+  const turnstileRef = useRef<TurnstileInstance>(null)
+
+  // Turnstile tokens are single-use — after any auth attempt, clear + re-issue.
+  function resetCaptcha() {
+    setCaptchaToken('')
+    turnstileRef.current?.reset()
+  }
 
   // The auth callback redirects here with ?error=auth_callback when a link
   // (e.g. a stale recovery/magic link) couldn't be verified. Surface it, then
@@ -31,20 +45,29 @@ export default function LoginPage() {
     // template) that /auth/reset verifies via verifyOtp — no PKCE code-verifier
     // cookie needed, so the link works on any device/browser, not just the one
     // that requested it.
+    if (TURNSTILE_SITE_KEY && !captchaToken) { toast.error('Please complete the verification first.'); return }
     const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/reset`,
+      captchaToken: captchaToken || undefined,
     })
+    resetCaptcha()
     if (err) { toast.error(err.message); return }
     toast.success('If that email exists, a reset link is on its way. Check your inbox.')
   }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
+    if (TURNSTILE_SITE_KEY && !captchaToken) { toast.error('Please complete the verification first.'); return }
     setLoading(true)
     const supabase = createClient()
-    const { error: err } = await supabase.auth.signInWithPassword({ email, password })
+    const { error: err } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      options: { captchaToken: captchaToken || undefined },
+    })
     if (err) {
       toast.error(err.message)
+      resetCaptcha()
       setLoading(false)
       return
     }
@@ -114,9 +137,22 @@ export default function LoginPage() {
             </div>
           </div>
 
+          {TURNSTILE_SITE_KEY && (
+            <div className="flex justify-center">
+              <Turnstile
+                ref={turnstileRef}
+                siteKey={TURNSTILE_SITE_KEY}
+                options={{ theme: 'auto', size: 'flexible' }}
+                onSuccess={setCaptchaToken}
+                onExpire={() => setCaptchaToken('')}
+                onError={() => setCaptchaToken('')}
+              />
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || (!!TURNSTILE_SITE_KEY && !captchaToken)}
             className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition"
           >
             {loading ? 'Signing in…' : 'Sign In'}

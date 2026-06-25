@@ -16,11 +16,14 @@ const cspReportOnly = [
   "frame-ancestors 'none'",
   "form-action 'self'",
   "img-src 'self' data: blob: https:",
-  "script-src 'self' 'unsafe-inline'",
+  // challenges.cloudflare.com: Cloudflare Turnstile (login CAPTCHA) loads its
+  // script and renders its widget inside an iframe from this origin.
+  "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+  "frame-src 'self' https://challenges.cloudflare.com",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
   "worker-src 'self' blob:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openrouteservice.org https://*.tile.openstreetmap.org https://nominatim.openstreetmap.org",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openrouteservice.org https://*.tile.openstreetmap.org https://nominatim.openstreetmap.org https://challenges.cloudflare.com",
 ].join('; ')
 
 const securityHeaders = [
