@@ -13,13 +13,21 @@ updates:
         update-types:
           - "minor"
           - "patch"
-    # xlsx is pinned to the SheetJS CDN tarball (not the vulnerable npm package);
-    # Dependabot can't resolve CDN URLs, so don't let it try to "update" it.
     ignore:
+      # xlsx is pinned to the SheetJS CDN tarball (not the vulnerable npm package);
+      # Dependabot can't resolve CDN URLs, so don't let it try to "update" it.
       - dependency-name: "xlsx"
+      # Don't open routine major-version bumps (breaking changes — next 16, tailwind 4,
+      # etc.). Minor/patch still flow, and SECURITY updates come through regardless of
+      # this rule, so we stay patched without the upgrade-churn noise.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
-  # Keep GitHub Actions used in workflows patched too.
+  # Keep GitHub Actions used in workflows patched too (minor/patch only).
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
