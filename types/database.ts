@@ -1,5 +1,9 @@
 export type Role = 'admin' | 'member' | 'committee'
 export type Status = 'on_bus' | 'off_bus'
+// How a participant travels to the villa. Only 'bus' travelers are tracked for
+// on/off-bus boarding (counts, scanning, seats); 'advance' (Setup Crew) and
+// 'convoy' (own vehicle) participants travel separately.
+export type TravelMode = 'bus' | 'advance' | 'convoy'
 export type LogAction = 'out' | 'in'
 
 export interface Room {
@@ -18,6 +22,7 @@ export interface Profile {
   group_label: string | null
   photo_url: string | null
   status: Status
+  travel_mode: TravelMode
   // Sensitive PII — lives in member_private, not profiles. Present only when the
   // caller is allowed to see it (own row, or admin/committee) and merged in via
   // mergePrivate(). Optional so member-facing roster rows that omit them typecheck.

@@ -1,7 +1,20 @@
-import type { Status } from '@/types/database'
+import type { Status, TravelMode } from '@/types/database'
 
 export function statusLabel(s: Status) {
   return s === 'on_bus' ? 'On Bus' : 'Off Bus'
+}
+
+export const TRAVEL_MODE_LABELS: Record<TravelMode, string> = {
+  bus:     'Bus',
+  advance: 'Setup Crew',
+  convoy:  'Convoy',
+}
+
+/** Bus travelers are the only ones tracked for on/off-bus boarding — they're the
+ *  ones counted, scanned, and seated. Setup Crew (advance) and Convoy travel on
+ *  their own, so they're excluded from those flows but keep every other feature. */
+export function isBusTraveler(mode: TravelMode | null | undefined): boolean {
+  return (mode ?? 'bus') === 'bus'
 }
 
 export function cn(...classes: (string | undefined | false | null)[]) {

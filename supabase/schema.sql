@@ -24,6 +24,8 @@ create table if not exists public.profiles (
   group_label    text,
   photo_url      text,
   status         text        not null default 'off_bus' check (status in ('on_bus', 'off_bus')),
+  -- How they travel. Only 'bus' travelers count toward on/off-bus and get scanned/seated.
+  travel_mode    text        not null default 'bus' check (travel_mode in ('bus', 'advance', 'convoy')),
   bus_number        int         check (bus_number in (1, 2)),
   seat_number       int         check (seat_number between 1 and 31),
   room_id           uuid        references public.rooms(id) on delete set null,
@@ -239,6 +241,12 @@ create index if not exists logs_member_id_idx     on public.status_logs(member_i
 --     return new;
 --   end; $$;
 -- commit;
+
+-- Step 9: travel mode — Setup Crew (advance) / Convoy ride separately from the bus
+-- (run on existing deployments). Existing rows default to 'bus'.
+-- alter table public.profiles
+--   add column if not exists travel_mode text not null default 'bus'
+--   check (travel_mode in ('bus', 'advance', 'convoy'));
 
 -- Step 7: onboarding is now device-locked (localStorage), not per-user — drop the
 -- unused flag (run on existing deployments):
