@@ -6,6 +6,7 @@ import { isDuplicateEmail } from '@/lib/supabase/auth-errors'
 
 // Bulk import creates member/committee accounts only — never admins.
 const VALID_ROLES = ['committee', 'member']
+const VALID_TRAVEL_MODES = ['bus', 'advance', 'convoy']
 
 interface MemberRow {
   email: string
@@ -15,6 +16,7 @@ interface MemberRow {
   phone?: string
   group_label?: string
   role?: string
+  travel_mode?: string
 }
 
 export async function POST(req: NextRequest) {
@@ -67,6 +69,7 @@ export async function POST(req: NextRequest) {
         full_name:   m.full_name,
         role:        VALID_ROLES.includes(m.role ?? '') ? m.role : 'member',
         group_label: m.group_label ?? null,
+        travel_mode: VALID_TRAVEL_MODES.includes(m.travel_mode ?? '') ? m.travel_mode : 'bus',
       })
 
       if (profileError) {

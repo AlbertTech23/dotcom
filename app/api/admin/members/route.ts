@@ -6,6 +6,7 @@ import { isDuplicateEmail } from '@/lib/supabase/auth-errors'
 
 // Admin accounts are NOT created via this endpoint — only member/committee.
 const VALID_ROLES = ['committee', 'member']
+const VALID_TRAVEL_MODES = ['bus', 'advance', 'convoy']
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
   if (denied) return denied
 
   const body = await req.json()
-  const { email, password, full_name, student_id, phone, group_label, room_id, role } = body
+  const { email, password, full_name, student_id, phone, group_label, room_id, role, travel_mode } = body
 
   if (!email || !password || !full_name) {
     return NextResponse.json({ error: 'email, password, and full_name are required' }, { status: 400 })
@@ -55,6 +56,7 @@ export async function POST(req: NextRequest) {
     role:        newRole,
     group_label: group_label ?? null,
     room_id:     room_id ?? null,
+    travel_mode: VALID_TRAVEL_MODES.includes(travel_mode) ? travel_mode : 'bus',
   })
 
   if (profileError) {

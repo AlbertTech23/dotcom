@@ -27,6 +27,7 @@ export function MemberForm({ mode, profile, rooms, groups, canAssignRole = false
     group_label: profile?.group_label ?? '',
     room_id:     profile?.room_id     ?? '',
     role:        profile?.role        ?? 'member',
+    travel_mode: profile?.travel_mode ?? 'bus',
   })
   const [roomList, setRoomList]   = useState<Room[]>(rooms)
   const [groupList, setGroupList] = useState<string[]>(groups)
@@ -92,6 +93,7 @@ export function MemberForm({ mode, profile, rooms, groups, canAssignRole = false
       phone:       form.phone,
       group_label: form.group_label.trim() || null,
       room_id:     form.room_id || null,
+      travel_mode: form.travel_mode,
     }
 
     try {
@@ -140,6 +142,7 @@ export function MemberForm({ mode, profile, rooms, groups, canAssignRole = false
   const labelClass = "block text-sm text-slate-700 dark:text-slate-300 mb-1"
   const isMember = form.role === 'member'
   const nimRequired = mode === 'create' && isMember  // member's password is their NIM
+  const isBus = form.travel_mode === 'bus'           // only bus travelers get a seat
 
   return (
     <form onSubmit={submit} className="space-y-4">
@@ -202,9 +205,23 @@ export function MemberForm({ mode, profile, rooms, groups, canAssignRole = false
         </div>
       </div>
 
-      {/* Group + (create only) where to seat them. Bus here is just routing — the
-          actual bus+seat are written together on the Bus page so they never drift. */}
-      <div className={mode === 'create' ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : ''}>
+      {/* Travel mode — bus passenger vs. Setup Crew / Convoy. Non-bus travelers
+          aren't counted on/off the bus, scanned, or seated. */}
+      <div>
+        <label className={labelClass}>Travel mode</label>
+        <select className={`${inputClass} app-select`} value={form.travel_mode} onChange={e => update('travel_mode', e.target.value)}>
+          <option value="bus">Bus passenger</option>
+          <option value="advance">Setup Crew — goes ahead to prep the villa</option>
+          <option value="convoy">Convoy — rides their own vehicle</option>
+        </select>
+        {!isBus && (
+          <p className="text-xs text-slate-400 mt-1">Not tracked on/off the bus and no seat — still uses location sharing, rooms, and contacts.</p>
+        )}
+      </div>
+
+      {/* Group + (create only, bus only) where to seat them. Bus here is just routing
+          — the actual bus+seat are written together on the Bus page so they never drift. */}
+      <div className={mode === 'create' && isBus ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : ''}>
         <div>
           <label className={labelClass}>Group</label>
           <select
@@ -220,7 +237,7 @@ export function MemberForm({ mode, profile, rooms, groups, canAssignRole = false
             <option value={NEW}>+ Add new group</option>
           </select>
         </div>
-        {mode === 'create' && (
+        {mode === 'create' && isBus && (
           <div>
             <label className={labelClass}>Bus seat</label>
             <select className={`${inputClass} app-select`} value={seatBus} onChange={e => setSeatBus(e.target.value as '' | '1' | '2')}>

@@ -18,8 +18,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.full_name   !== undefined) profileUpdate.full_name   = body.full_name
   if (body.group_label !== undefined) profileUpdate.group_label = body.group_label
   if (body.room_id     !== undefined) profileUpdate.room_id     = body.room_id ?? null
-  // bus_number is intentionally NOT writable here — bus + seat are set together on
-  // the Bus page so they never drift apart.
+  if (body.travel_mode !== undefined && ['bus', 'advance', 'convoy'].includes(body.travel_mode)) {
+    profileUpdate.travel_mode = body.travel_mode
+    // Setup Crew / Convoy don't board, so vacate any bus seat they held — keeps
+    // them off the bus map and out of the on/off-bus counts.
+    if (body.travel_mode !== 'bus') {
+      profileUpdate.bus_number  = null
+      profileUpdate.seat_number = null
+    }
+  }
+  // bus_number is intentionally NOT writable directly here — bus + seat are set
+  // together on the Bus page so they never drift apart (the only exception is
+  // clearing them above when a member stops being a bus traveler).
 
   if (Object.keys(profileUpdate).length > 0) {
     const { error } = await supabase.from('profiles').update(profileUpdate).eq('id', id)
