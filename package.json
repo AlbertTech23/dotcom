@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@radix-ui/react-portal": "^1.1.12",
-    "@supabase/ssr": "^0.5.2",
+    "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.47.0",
     "@tanstack/react-table": "^8.20.5",
     "framer-motion": "^11.18.2",
@@ -34,7 +34,7 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "autoprefixer": "^10.4.20",
+    "autoprefixer": "^10.5.2",
     "eslint": "^9",
     "eslint-config-next": "^15.1.0",
     "postcss": "^8.4.49",
